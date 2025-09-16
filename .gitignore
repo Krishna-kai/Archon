@@ -9,3 +9,8 @@ PRPs/completed/
 tmp/
 temp/
 UAT/
+# AI Assistant Rules
+.augment/
+.clinerules/
+.kilocode/
+.roo/
