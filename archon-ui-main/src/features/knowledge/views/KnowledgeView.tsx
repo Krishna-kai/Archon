@@ -4,14 +4,14 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useToast } from "../../ui/hooks/useToast";
+import { useToast } from "@/features/shared/hooks/useToast";
+import { CrawlingProgress } from "../../progress/components/CrawlingProgress";
+import type { ActiveOperation } from "../../progress/types";
 import { AddKnowledgeDialog } from "../components/AddKnowledgeDialog";
 import { KnowledgeHeader } from "../components/KnowledgeHeader";
 import { KnowledgeList } from "../components/KnowledgeList";
 import { useKnowledgeSummaries } from "../hooks/useKnowledgeQueries";
 import { KnowledgeInspector } from "../inspector/components/KnowledgeInspector";
-import { CrawlingProgress } from "../progress/components/CrawlingProgress";
-import type { ActiveOperation } from "../progress/types";
 import type { KnowledgeItem, KnowledgeItemsFilter } from "../types";
 
 export const KnowledgeView = () => {
@@ -23,6 +23,7 @@ export const KnowledgeView = () => {
   // Dialog state
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [inspectorItem, setInspectorItem] = useState<KnowledgeItem | null>(null);
+  const [inspectorInitialTab, setInspectorInitialTab] = useState<"documents" | "code">("documents");
 
   // Build filter object for API - memoize to prevent recreating on every render
   const filter = useMemo<KnowledgeItemsFilter>(() => {
@@ -96,9 +97,19 @@ export const KnowledgeView = () => {
   };
 
   const handleViewDocument = (sourceId: string) => {
-    // Find the item and open inspector instead of document browser
+    // Find the item and open inspector to documents tab
     const item = knowledgeItems.find((k) => k.source_id === sourceId);
     if (item) {
+      setInspectorInitialTab("documents");
+      setInspectorItem(item);
+    }
+  };
+
+  const handleViewCodeExamples = (sourceId: string) => {
+    // Open the inspector to code examples tab
+    const item = knowledgeItems.find((k) => k.source_id === sourceId);
+    if (item) {
+      setInspectorInitialTab("code");
       setInspectorItem(item);
     }
   };
@@ -146,6 +157,7 @@ export const KnowledgeView = () => {
           error={error}
           onRetry={refetch}
           onViewDocument={handleViewDocument}
+          onViewCodeExamples={handleViewCodeExamples}
           onDeleteSuccess={handleDeleteSuccess}
           activeOperations={activeOperations}
           onRefreshStarted={(progressId) => {
@@ -177,6 +189,7 @@ export const KnowledgeView = () => {
           onOpenChange={(open) => {
             if (!open) setInspectorItem(null);
           }}
+          initialTab={inspectorInitialTab}
         />
       )}
     </div>

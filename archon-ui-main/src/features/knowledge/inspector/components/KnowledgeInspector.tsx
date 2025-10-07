@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { copyToClipboard } from "../../../shared/utils/clipboard";
 import { InspectorDialog, InspectorDialogContent, InspectorDialogTitle } from "../../../ui/primitives";
 import type { CodeExample, DocumentChunk, InspectorSelectedItem, KnowledgeItem } from "../../types";
 import { useInspectorPagination } from "../hooks/useInspectorPagination";
@@ -15,15 +16,27 @@ interface KnowledgeInspectorProps {
   item: KnowledgeItem;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialTab?: "documents" | "code";
 }
 
 type ViewMode = "documents" | "code";
 
-export const KnowledgeInspector: React.FC<KnowledgeInspectorProps> = ({ item, open, onOpenChange }) => {
-  const [viewMode, setViewMode] = useState<ViewMode>("documents");
+export const KnowledgeInspector: React.FC<KnowledgeInspectorProps> = ({
+  item,
+  open,
+  onOpenChange,
+  initialTab = "documents",
+}) => {
+  const [viewMode, setViewMode] = useState<ViewMode>(initialTab);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedItem, setSelectedItem] = useState<InspectorSelectedItem | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Reset view mode when item or initialTab changes
+  useEffect(() => {
+    setViewMode(initialTab);
+    setSelectedItem(null); // Clear selected item when switching tabs
+  }, [item.source_id, initialTab]);
 
   // Use pagination hook for current view mode
   const paginationData = useInspectorPagination({
@@ -80,12 +93,12 @@ export const KnowledgeInspector: React.FC<KnowledgeInspectorProps> = ({ item, op
   }, [viewMode, currentItems, selectedItem]);
 
   const handleCopy = useCallback(async (text: string, id: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
+    const result = await copyToClipboard(text);
+    if (result.success) {
       setCopiedId(id);
       setTimeout(() => setCopiedId((v) => (v === id ? null : v)), 2000);
-    } catch (error) {
-      console.error("Failed to copy to clipboard:", error);
+    } else {
+      console.error("Failed to copy to clipboard:", result.error);
     }
   }, []);
 

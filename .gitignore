@@ -4,13 +4,17 @@ __pycache__
 .claude/settings.local.json
 PRPs/local
 PRPs/completed/
+PRPs/stories/
 /logs/
 .zed
 tmp/
 temp/
 UAT/
+
 # AI Assistant Rules
 .augment/
 .clinerules/
 .kilocode/
 .roo/
+
+.DS_Store
