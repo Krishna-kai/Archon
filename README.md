@@ -85,24 +85,25 @@ This new vision for Archon replaces the old one (the agenteer). Archon used to b
    ```
 
    This starts all core microservices in Docker:
-   - **Server**: Core API and business logic (Port: 8181)
-   - **MCP Server**: Protocol interface for AI clients (Port: 8051)
-   - **UI**: Web interface (Port: 3737)
+   - **Server**: Core API and business logic (Port: 9181)
+   - **MCP Server**: Protocol interface for AI clients (Port: 9051)
+   - **UI**: Web interface (Port: 9737)
 
    Ports are configurable in your .env as well!
 
 5. **Configure API Keys**:
-   - Open http://localhost:3737
+   - Open http://localhost:9737
    - You'll automatically be brought through an onboarding flow to set your API key (OpenAI is default)
 
 ## ⚡ Quick Test
 
 Once everything is running:
 
-1. **Test Web Crawling**: Go to http://localhost:3737 → Knowledge Base → "Crawl Website" → Enter a doc URL (such as https://ai.pydantic.dev/llms-full.txt)
-2. **Test Document Upload**: Knowledge Base → Upload a PDF
-3. **Test Projects**: Projects → Create a new project and add tasks
-4. **Integrate with your AI coding assistant**: MCP Dashboard → Copy connection config for your AI coding assistant 
+1. **Access the UI**: Open http://localhost:9737 in your browser
+2. **Test Web Crawling**: Go to http://localhost:9737 → Knowledge Base → "Crawl Website" → Enter a doc URL (such as https://ai.pydantic.dev/llms-full.txt)
+3. **Test Document Upload**: Knowledge Base → Upload a PDF
+4. **Test Projects**: Projects → Create a new project and add tasks
+5. **Integrate with your AI coding assistant**: MCP Dashboard → Copy connection config for your AI coding assistant
 
 ## Installing Make
 
