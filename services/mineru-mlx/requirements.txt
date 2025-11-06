@@ -1,0 +1,19 @@
+# MinerU MLX Service Requirements
+# Python 3.12+
+# Native Mac service for Apple Silicon with Metal GPU acceleration
+
+# Core Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+pydantic>=2.5.0
+
+# MinerU Framework (Apple Silicon optimized)
+# Use mineru package with core dependencies
+mineru[core]
+
+# Image Processing
+Pillow>=10.2.0
+
+# Optional: Enhanced logging
+python-json-logger>=2.0.7
