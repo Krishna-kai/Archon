@@ -513,6 +513,23 @@ def register_modules():
         logger.error(f"✗ Failed to register version tools: {e}")
         logger.error(traceback.format_exc())
 
+    # Docling OCR Tools (Optional)
+    try:
+        from src.mcp_server.features.docling import register_docling_tools
+
+        register_docling_tools(mcp)
+        modules_registered += 1
+        logger.info("✓ Docling OCR tools registered")
+    except ImportError as e:
+        logger.warning(f"⚠ Docling OCR tools module not available (optional): {e}")
+    except (SyntaxError, NameError, AttributeError) as e:
+        logger.error(f"✗ Code error in Docling OCR tools - MUST FIX: {e}")
+        logger.error(traceback.format_exc())
+        raise
+    except Exception as e:
+        logger.error(f"✗ Failed to register Docling OCR tools: {e}")
+        logger.error(traceback.format_exc())
+
     # Feature Management Tools
     try:
         from src.mcp_server.features.feature_tools import register_feature_tools

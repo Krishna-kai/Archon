@@ -33,6 +33,8 @@ class ServiceDiscovery:
         mcp_port = os.getenv("ARCHON_MCP_PORT")
         agents_port = os.getenv("ARCHON_AGENTS_PORT")
         agent_work_orders_port = os.getenv("AGENT_WORK_ORDERS_PORT")
+        docling_port = os.getenv("DOCLING_OCR_PORT", "9000")
+        ocrmypdf_port = os.getenv("OCRMYPDF_PORT", "9002")
 
         # Required ports (core services)
         if not server_port:
@@ -54,13 +56,15 @@ class ServiceDiscovery:
                 "Default value: 8052"
             )
 
-        # Optional ports (agent_work_orders is an optional feature)
+        # Optional ports (agent_work_orders, docling_ocr, ocrmypdf are optional features)
         # Store None if not configured to indicate feature is unavailable
         self.DEFAULT_PORTS = {
             "api": int(server_port),
             "mcp": int(mcp_port),
             "agents": int(agents_port),
             "agent_work_orders": int(agent_work_orders_port) if agent_work_orders_port else None,
+            "docling_ocr": int(docling_port) if docling_port else None,
+            "ocrmypdf": int(ocrmypdf_port) if ocrmypdf_port else None,
         }
 
         self.environment = self._detect_environment()
@@ -72,10 +76,14 @@ class ServiceDiscovery:
         "mcp": "archon-mcp",
         "agents": "archon-agents",
         "agent_work_orders": "archon-agent-work-orders",
+        "docling_ocr": "docling-ocr",
+        "ocrmypdf": "ocrmypdf-service",
         "archon-server": "archon-server",
         "archon-mcp": "archon-mcp",
         "archon-agents": "archon-agents",
         "archon-agent-work-orders": "archon-agent-work-orders",
+        "docling-ocr": "docling-ocr",
+        "ocrmypdf-service": "ocrmypdf-service",
     }
 
     @staticmethod
@@ -262,6 +270,26 @@ def get_agent_work_orders_url() -> str | None:
     return get_discovery().get_service_url("agent_work_orders")
 
 
+def get_docling_ocr_url() -> str | None:
+    """
+    Get the Docling OCR service URL.
+
+    Returns:
+        Service URL or None if Docling OCR service is not configured.
+    """
+    return get_discovery().get_service_url("docling_ocr")
+
+
+def get_ocrmypdf_url() -> str | None:
+    """
+    Get the OCRmyPDF service URL.
+
+    Returns:
+        Service URL or None if OCRmyPDF service is not configured.
+    """
+    return get_discovery().get_service_url("ocrmypdf")
+
+
 def is_service_available(service: str) -> bool:
     """
     Check if a service is configured and available.
@@ -289,6 +317,8 @@ __all__ = [
     "get_mcp_url",
     "get_agents_url",
     "get_agent_work_orders_url",
+    "get_docling_ocr_url",
+    "get_ocrmypdf_url",
     "is_service_available",
     "is_service_healthy",
 ]

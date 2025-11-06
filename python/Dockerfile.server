@@ -23,10 +23,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install runtime dependencies for Playwright (minimal set)
+# Install runtime dependencies for Playwright, Docker CLI, and MinerU
 RUN apt-get update && apt-get install -y \
     wget \
     ca-certificates \
+    docker.io \
     fonts-liberation \
     libasound2 \
     libatk-bridge2.0-0 \
@@ -46,11 +47,21 @@ RUN apt-get update && apt-get install -y \
     libxkbcommon0 \
     libxrandr2 \
     xdg-utils \
+    fonts-noto-core \
+    fonts-noto-cjk \
+    fontconfig \
+    libgl1 \
+    && fc-cache -fv \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Copy the virtual environment from builder
 COPY --from=builder /venv /venv
+
+# Download MinerU models and configure to use local models
+ENV PATH=/venv/bin:$PATH
+RUN /bin/bash -c "mineru-models-download -s huggingface -m all"
+ENV MINERU_MODEL_SOURCE=local
 
 # Install Playwright browsers
 ENV PATH=/venv/bin:$PATH

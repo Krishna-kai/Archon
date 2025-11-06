@@ -31,6 +31,7 @@ services:
       - AGENT_WORK_ORDERS_PORT=${AGENT_WORK_ORDERS_PORT:-8053}
       - AGENTS_ENABLED=${AGENTS_ENABLED:-false}
       - ARCHON_HOST=${HOST:-localhost}
+      - MINERU_SERVICE_URL=${MINERU_SERVICE_URL:-}
     networks:
       - app-network
     volumes:
@@ -240,6 +241,199 @@ services:
         condition: service_healthy
         restart: true
 
+  # OCRmyPDF Service (Docker-based OCR)
+  ocrmypdf-service:
+    profiles:
+      - ocr  # Only starts when explicitly using --profile ocr
+    build:
+      context: ./services/ocrmypdf
+      dockerfile: Dockerfile
+    container_name: ocrmypdf-service
+    restart: unless-stopped
+    ports:
+      - "9002:9001"
+    environment:
+      - OCRMYPDF_IMAGE=${OCRMYPDF_IMAGE:-jbarlow83/ocrmypdf-alpine}
+      - SERVICE_MODE=docker
+      - PORT=9001
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - app-network
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # Docker socket for running OCRmyPDF containers
+      - ocrmypdf-temp:/tmp  # Temp files for processing
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          'import urllib.request; urllib.request.urlopen("http://localhost:9001/health")',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Docling OCR Service (Archon-native with ARM64 support)
+  docling-ocr:
+    profiles:
+      - ocr  # Only starts when explicitly using --profile ocr
+    build:
+      context: ./services/docling
+      dockerfile: Dockerfile
+    container_name: docling-ocr
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OMP_NUM_THREADS=4
+      - HF_HOME=/models
+      - TORCH_HOME=/models
+      - DOCLING_ARTIFACTS_PATH=/models/docling
+      - PORT=9000
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - app-network
+    volumes:
+      - docling-models:/models  # Model cache (persisted across restarts)
+      - docling-temp:/tmp  # Temp files for processing
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Stirling PDF Service (Web-based batch OCR processing)
+  stirling-pdf:
+    profiles:
+      - ocr  # Starts with all OCR services using --profile ocr
+    image: stirlingtools/stirling-pdf:latest
+    container_name: stirling-pdf
+    restart: unless-stopped
+    ports:
+      - "${STIRLING_PDF_PORT:-9003}:8080"
+    environment:
+      - LANGS=en_GB,en_US
+      - DOCKER_ENABLE_SECURITY=false  # Disable auth for local development
+      - SYSTEM_DEFAULTLOCALE=en-GB
+      - UI_APP_NAME=Archon PDF Tools
+      - UI_HOME_DESCRIPTION=PDF processing and OCR powered by Archon
+    networks:
+      - app-network
+    volumes:
+      - stirling-pdf-training:/usr/share/tessdata  # Tesseract training data
+      - stirling-pdf-configs:/configs  # Extra configurations
+      - stirling-pdf-logs:/logs  # Log files
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/info/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # LaTeX-OCR Service (Formula image to LaTeX conversion) - Native ARM64/AMD64
+  latex-ocr:
+    profiles:
+      - ocr  # Starts with all OCR services using --profile ocr
+    build:
+      context: ./services/latex-ocr
+      dockerfile: Dockerfile
+    container_name: latex-ocr
+    restart: unless-stopped
+    ports:
+      - "9001:9001"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PORT=9001
+    networks:
+      - app-network
+    volumes:
+      - latex-ocr-models:/root/.cache/huggingface  # Model cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s  # Longer startup for model loading
+
+  # Parser Service - Orchestrates Docling + LaTeX-OCR for complete PDF extraction
+  parser-service:
+    profiles:
+      - ocr  # Starts with all OCR services using --profile ocr
+    build:
+      context: ./services/parser
+      dockerfile: Dockerfile
+    container_name: parser-service
+    restart: unless-stopped
+    ports:
+      - "9004:9004"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DOCLING_URL=http://docling-ocr:9000
+      - LATEX_OCR_URL=http://latex-ocr:9001
+      - PORT=9004
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - app-network
+    depends_on:
+      docling-ocr:
+        condition: service_healthy
+      latex-ocr:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:9004/health', timeout=5.0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Marker - PDF to Markdown with Formulas & Tables (CPU-friendly)
+  marker-pdf:
+    profiles:
+      - advanced-ocr
+    build:
+      context: ./services/marker
+      dockerfile: Dockerfile
+    container_name: marker-pdf
+    restart: unless-stopped
+    ports:
+      - "${MARKER_PORT:-7100}:7000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - app-network
+    volumes:
+      - marker-models:/root/.cache/huggingface  # Model cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s  # Longer startup for model loading
+
+  # NOTE: MinerU Docker service removed - now using native Mac service for Apple GPU acceleration
+  # See python/start_mineru_service.sh and python/src/mineru_service/main.py
+  # Configure via MINERU_SERVICE_URL=http://host.docker.internal:8055 in .env
+
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  ocrmypdf-temp:  # Temp files for OCRmyPDF processing
+  docling-models:  # Docling model cache (HuggingFace models)
+  docling-temp:  # Temp files for Docling processing
+  stirling-pdf-training:  # Tesseract training data for Stirling PDF
+  stirling-pdf-configs:  # Stirling PDF configurations
+  stirling-pdf-logs:  # Stirling PDF logs
+  marker-models:  # Marker model cache for formula and table extraction
+  latex-ocr-models:  # LaTeX-OCR model cache (pix2tex models)
+  # NOTE: mineru-models volume removed - native service uses host filesystem

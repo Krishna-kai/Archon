@@ -1,7 +1,7 @@
 """
 Storage Services
 
-Handles document and code storage operations.
+Handles document, code, and image storage operations.
 """
 
 from .base_storage_service import BaseStorageService
@@ -11,6 +11,7 @@ from .code_storage_service import (
     generate_code_example_summary,
 )
 from .document_storage_service import add_documents_to_supabase
+from .image_storage_service import ImageStorageService, get_image_storage_service
 from .storage_services import DocumentStorageService
 
 __all__ = [
@@ -18,10 +19,13 @@ __all__ = [
     "BaseStorageService",
     # Service classes
     "DocumentStorageService",
+    "ImageStorageService",
     # Document storage utilities
     "add_documents_to_supabase",
     # Code storage utilities
     "extract_code_blocks",
     "generate_code_example_summary",
     "add_code_examples_to_supabase",
+    # Image storage utilities
+    "get_image_storage_service",
 ]

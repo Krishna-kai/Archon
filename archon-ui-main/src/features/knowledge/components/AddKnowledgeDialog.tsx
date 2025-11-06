@@ -48,6 +48,7 @@ export const AddKnowledgeDialog: React.FC<AddKnowledgeDialogProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadType, setUploadType] = useState<"technical" | "business">("technical");
   const [uploadTags, setUploadTags] = useState<string[]>([]);
+  const [useOcr, setUseOcr] = useState(false);
 
   const resetForm = () => {
     setCrawlUrl("");
@@ -57,6 +58,7 @@ export const AddKnowledgeDialog: React.FC<AddKnowledgeDialogProps> = ({
     setSelectedFile(null);
     setUploadType("technical");
     setUploadTags([]);
+    setUseOcr(false);
   };
 
   const handleCrawl = async () => {
@@ -101,6 +103,7 @@ export const AddKnowledgeDialog: React.FC<AddKnowledgeDialogProps> = ({
       const metadata: UploadMetadata = {
         knowledge_type: uploadType,
         tags: uploadTags.length > 0 ? uploadTags : undefined,
+        use_ocr: useOcr,
       };
 
       const response = await uploadMutation.mutateAsync({ file: selectedFile, metadata });
@@ -226,7 +229,7 @@ export const AddKnowledgeDialog: React.FC<AddKnowledgeDialogProps> = ({
                 <input
                   id={fileId}
                   type="file"
-                  accept=".txt,.md,.pdf,.doc,.docx,.html,.htm"
+                  accept=".txt,.md,.pdf,.doc,.docx,.html,.htm,.jpg,.jpeg,.png,.bmp,.tiff,.tif"
                   onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
                   disabled={isProcessing}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
@@ -257,7 +260,7 @@ export const AddKnowledgeDialog: React.FC<AddKnowledgeDialogProps> = ({
                       <div className="space-y-1">
                         <p className="font-medium text-gray-700 dark:text-gray-300">Click to browse or drag & drop</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                          PDF, DOC, DOCX, TXT, MD files supported
+                          PDF, DOC, DOCX, TXT, MD, JPG, PNG files supported
                         </p>
                       </div>
                     )}
@@ -265,6 +268,33 @@ export const AddKnowledgeDialog: React.FC<AddKnowledgeDialogProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* OCR Toggle */}
+            {selectedFile && (
+              <div className="space-y-2">
+                <div className="flex items-start space-x-3">
+                  <input
+                    type="checkbox"
+                    id="use-ocr"
+                    checked={useOcr}
+                    onChange={(e) => setUseOcr(e.target.checked)}
+                    disabled={isProcessing}
+                    className="mt-1 w-4 h-4 text-purple-600 bg-white border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
+                  />
+                  <div className="flex-1">
+                    <label htmlFor="use-ocr" className="text-sm font-medium text-gray-900 dark:text-white/90 cursor-pointer">
+                      Use OCR for scanned documents and images
+                    </label>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Enable for scanned PDFs, images (JPG, PNG), or documents without selectable text.
+                      <span className="text-amber-600 dark:text-amber-400 ml-1">
+                        OCR processing may take 30s-2min longer.
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <KnowledgeTypeSelector value={uploadType} onValueChange={setUploadType} disabled={isProcessing} />
 

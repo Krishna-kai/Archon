@@ -145,6 +145,7 @@ export interface CrawlRequest {
 export interface UploadMetadata {
   knowledge_type?: "technical" | "business";
   tags?: string[];
+  use_ocr?: boolean;
 }
 
 export interface SearchOptions {

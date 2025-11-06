@@ -897,10 +897,25 @@ async def upload_document(
     tags: str | None = Form(None),
     knowledge_type: str = Form("technical"),
     extract_code_examples: bool = Form(True),
+    use_ocr: bool = Form(False),
+    use_mineru: bool = Form(False),
+    extract_charts: bool = Form(False),
+    chart_provider: str = Form("auto"),
 ):
-    """Upload and process a document with progress tracking."""
-    
-    # Validate API key before starting expensive upload operation  
+    """Upload and process a document with progress tracking.
+
+    Args:
+        file: The document file to upload
+        tags: JSON array of tag strings
+        knowledge_type: Type of knowledge (technical, general, etc.)
+        extract_code_examples: Whether to extract code snippets
+        use_ocr: Whether to use OCR for images and scanned PDFs
+        use_mineru: Whether to use MinerU for PDF formula extraction (high accuracy)
+        extract_charts: Whether to extract chart data from images (requires use_mineru=True)
+        chart_provider: Chart extraction provider ("auto", "local", "claude")
+    """
+
+    # Validate API key before starting expensive upload operation
     logger.info("🔍 About to validate API key for upload...")
     provider_config = await credential_service.get_active_provider("embedding")
     provider = provider_config.get("provider", "openai")
@@ -950,7 +965,7 @@ async def upload_document(
         # Upload tasks can be tracked directly since they don't spawn sub-tasks
         upload_task = asyncio.create_task(
             _perform_upload_with_progress(
-                progress_id, file_content, file_metadata, tag_list, knowledge_type, extract_code_examples, tracker
+                progress_id, file_content, file_metadata, tag_list, knowledge_type, extract_code_examples, use_ocr, use_mineru, extract_charts, chart_provider, tracker
             )
         )
         # Track the task for cancellation support
@@ -979,9 +994,27 @@ async def _perform_upload_with_progress(
     tag_list: list[str],
     knowledge_type: str,
     extract_code_examples: bool,
+    use_ocr: bool,
+    use_mineru: bool,
+    extract_charts: bool,
+    chart_provider: str,
     tracker: "ProgressTracker",
 ):
-    """Perform document upload with progress tracking using service layer."""
+    """Perform document upload with progress tracking using service layer.
+
+    Args:
+        progress_id: Unique progress tracking ID
+        file_content: Raw file bytes
+        file_metadata: File metadata (filename, content_type, size)
+        tag_list: List of tags
+        knowledge_type: Type of knowledge
+        extract_code_examples: Whether to extract code snippets
+        use_ocr: Whether to use OCR for text extraction
+        use_mineru: Whether to use MinerU for PDF formula extraction
+        extract_charts: Whether to extract chart data from images
+        chart_provider: Chart extraction provider ("auto", "local", "claude")
+        tracker: Progress tracker instance
+    """
     # Create cancellation check function for document uploads
     def check_upload_cancellation():
         """Check if upload task has been cancelled."""
@@ -1012,9 +1045,16 @@ async def _perform_upload_with_progress(
         )
 
         try:
-            extracted_text = extract_text_from_document(file_content, filename, content_type)
+            extracted_text, extracted_images = await extract_text_from_document(
+                file_content, filename, content_type,
+                use_ocr=use_ocr, use_mineru=use_mineru,
+                extract_charts=extract_charts, chart_provider=chart_provider
+            )
             safe_logfire_info(
-                f"Document text extracted | filename={filename} | extracted_length={len(extracted_text)} | content_type={content_type}"
+                f"Document text extracted | filename={filename} | extracted_length={len(extracted_text)} | "
+                f"images_extracted={len(extracted_images)} | content_type={content_type} | "
+                f"used_ocr={use_ocr} | used_mineru={use_mineru} | "
+                f"extract_charts={extract_charts} | chart_provider={chart_provider}"
             )
         except ValueError as ex:
             # ValueError indicates unsupported format or empty file - user error
@@ -1027,11 +1067,40 @@ async def _perform_upload_with_progress(
             await tracker.error(f"Failed to extract text from document: {str(ex)}")
             return
 
+        # Store extracted images if any (from MinerU)
+        stored_image_count = 0
+        if extracted_images:
+            logger.info(f"Storing {len(extracted_images)} extracted images for {filename}")
+            from ..services.storage import get_image_storage_service
+            image_service = get_image_storage_service()
+
+            # Generate source_id early so we can use it for images
+            source_id = f"file_{filename.replace(' ', '_').replace('.', '_')}_{uuid.uuid4().hex[:8]}"
+
+            for img_data in extracted_images:
+                try:
+                    await image_service.upload_image(
+                        source_id=source_id,
+                        image_data=img_data["base64"],
+                        mime_type=img_data.get("mime_type", "image/jpeg"),
+                        page_number=img_data.get("page_number"),
+                        image_index=img_data["image_index"],
+                        image_name=img_data["name"],
+                        page_id=None,  # File uploads don't have page_id
+                    )
+                    stored_image_count += 1
+                    logger.debug(f"Stored image {img_data['name']} for {source_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to store image {img_data['name']}: {e}")
+                    # Continue processing other images
+
+            logger.info(f"Successfully stored {stored_image_count}/{len(extracted_images)} images for {filename}")
+        else:
+            # Generate source_id for documents without images
+            source_id = f"file_{filename.replace(' ', '_').replace('.', '_')}_{uuid.uuid4().hex[:8]}"
+
         # Use DocumentStorageService to handle the upload
         doc_storage_service = DocumentStorageService(get_supabase_client())
-
-        # Generate source_id from filename with UUID to prevent collisions
-        source_id = f"file_{filename.replace(' ', '_').replace('.', '_')}_{uuid.uuid4().hex[:8]}"
 
         # Create progress callback for tracking document processing
         async def document_progress_callback(
@@ -1069,10 +1138,13 @@ async def _perform_upload_with_progress(
                 "log": "Document uploaded successfully!",
                 "chunks_stored": result.get("chunks_stored"),
                 "code_examples_stored": result.get("code_examples_stored", 0),
+                "images_stored": stored_image_count,
                 "sourceId": result.get("source_id"),
             })
             safe_logfire_info(
-                f"Document uploaded successfully | progress_id={progress_id} | source_id={result.get('source_id')} | chunks_stored={result.get('chunks_stored')} | code_examples_stored={result.get('code_examples_stored', 0)}"
+                f"Document uploaded successfully | progress_id={progress_id} | source_id={result.get('source_id')} | "
+                f"chunks_stored={result.get('chunks_stored')} | code_examples_stored={result.get('code_examples_stored', 0)} | "
+                f"images_stored={stored_image_count}"
             )
         else:
             error_msg = result.get("error", "Unknown error")
