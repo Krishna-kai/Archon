@@ -1,0 +1,387 @@
+"""
+Chart Extraction Service
+
+Provides chart and graph extraction capabilities using Claude 3.5 Sonnet Vision API.
+Handles detection and structured data extraction from various chart types:
+- Bar charts, line graphs, pie charts, scatter plots
+- Complex scientific visualizations
+- Multi-panel figures
+"""
+
+import asyncio
+import base64
+import json
+import logging
+from enum import Enum
+from io import BytesIO
+from typing import Any, Dict, List, Optional, Tuple
+
+from PIL import Image
+
+logger = logging.getLogger(__name__)
+
+
+class ChartType(str, Enum):
+    """Supported chart types"""
+
+    BAR = "bar"
+    LINE = "line"
+    PIE = "pie"
+    SCATTER = "scatter"
+    HEATMAP = "heatmap"
+    BOX_PLOT = "box_plot"
+    HISTOGRAM = "histogram"
+    AREA = "area"
+    MULTI_PANEL = "multi_panel"
+    UNKNOWN = "unknown"
+
+
+class ChartExtractionService:
+    """Service for extracting structured data from charts using Claude Vision API"""
+
+    def __init__(self, anthropic_api_key: Optional[str] = None):
+        """
+        Initialize the chart extraction service.
+
+        Args:
+            anthropic_api_key: Anthropic API key. If None, will use credentials service
+        """
+        self.anthropic_api_key = anthropic_api_key
+        self.model = "claude-3-5-sonnet-20241022"  # Claude 3.5 Sonnet with vision
+        self.max_image_size_mb = 5  # Claude Vision limit
+        self.timeout = 60.0  # 1 minute max for chart extraction
+
+    def is_available(self) -> bool:
+        """Check if chart extraction service is available"""
+        # Check if anthropic SDK is available
+        try:
+            import anthropic
+
+            return True
+        except ImportError:
+            logger.warning("anthropic SDK not installed. Run: uv pip install anthropic")
+            return False
+
+    async def health_check(self) -> Dict:
+        """
+        Check chart extraction service health.
+
+        Returns:
+            Health status dictionary
+        """
+        if not self.is_available():
+            return {
+                "status": "unavailable",
+                "message": "Anthropic SDK is not installed. Run: uv pip install anthropic",
+            }
+
+        try:
+            # Get API key from credentials service if not provided
+            if not self.anthropic_api_key:
+                from .credential_service import credential_service
+
+                provider_config = await credential_service.get_provider_config("anthropic")
+                if not provider_config or not provider_config.get("api_key"):
+                    return {
+                        "status": "unavailable",
+                        "message": "Anthropic API key not configured",
+                    }
+                self.anthropic_api_key = provider_config["api_key"]
+
+            # Test API connection with simple request
+            import anthropic
+
+            client = anthropic.AsyncAnthropic(api_key=self.anthropic_api_key)
+
+            # Simple test message
+            response = await asyncio.wait_for(
+                client.messages.create(
+                    model=self.model,
+                    max_tokens=10,
+                    messages=[{"role": "user", "content": "Test"}],
+                ),
+                timeout=5.0,
+            )
+
+            return {
+                "status": "healthy",
+                "service": "chart_extraction",
+                "model": self.model,
+                "version": "claude-3.5-sonnet",
+            }
+
+        except asyncio.TimeoutError:
+            return {
+                "status": "unhealthy",
+                "error": "Health check timed out",
+            }
+        except Exception as e:
+            logger.error(f"Chart extraction health check failed: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+            }
+
+    async def extract_chart_data(
+        self,
+        image_content: bytes,
+        chart_type: Optional[ChartType] = None,
+        context: Optional[str] = None,
+    ) -> Tuple[bool, Dict]:
+        """
+        Extract structured data from a chart image using Claude Vision.
+
+        Args:
+            image_content: Raw image bytes (PNG, JPEG, etc.)
+            chart_type: Optional hint about chart type
+            context: Optional context about the chart (e.g., "GDP growth over time")
+
+        Returns:
+            Tuple of (success: bool, result: Dict)
+            Result contains:
+            - chart_type: Detected chart type
+            - title: Chart title
+            - data: Structured data extracted from chart
+            - labels: Axis labels and legend
+            - description: Natural language description
+            - confidence: Confidence score (0-1)
+        """
+        if not self.is_available():
+            return False, {"error": "Chart extraction service not available"}
+
+        try:
+            # Get API key from credentials if not set
+            if not self.anthropic_api_key:
+                from .credential_service import credential_service
+
+                provider_config = await credential_service.get_provider_config("anthropic")
+                if not provider_config or not provider_config.get("api_key"):
+                    return False, {"error": "Anthropic API key not configured"}
+                self.anthropic_api_key = provider_config["api_key"]
+
+            # Validate image size
+            image_size_mb = len(image_content) / (1024 * 1024)
+            if image_size_mb > self.max_image_size_mb:
+                logger.warning(
+                    f"Image size {image_size_mb:.2f}MB exceeds limit {self.max_image_size_mb}MB, "
+                    f"compressing..."
+                )
+                image_content = await self._compress_image(image_content)
+
+            # Encode image to base64
+            image_base64 = base64.b64encode(image_content).decode("utf-8")
+
+            # Detect media type
+            media_type = self._detect_media_type(image_content)
+
+            # Build prompt for chart extraction
+            prompt = self._build_extraction_prompt(chart_type, context)
+
+            # Call Claude Vision API
+            import anthropic
+
+            client = anthropic.AsyncAnthropic(api_key=self.anthropic_api_key)
+
+            logger.info(
+                f"Extracting chart data with Claude Vision (type hint: {chart_type or 'auto-detect'})"
+            )
+
+            response = await asyncio.wait_for(
+                client.messages.create(
+                    model=self.model,
+                    max_tokens=2048,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": media_type,
+                                        "data": image_base64,
+                                    },
+                                },
+                                {"type": "text", "text": prompt},
+                            ],
+                        }
+                    ],
+                ),
+                timeout=self.timeout,
+            )
+
+            # Parse response
+            result = self._parse_vision_response(response)
+
+            logger.info(
+                f"Chart extraction complete: type={result.get('chart_type')}, "
+                f"confidence={result.get('confidence', 0):.2f}"
+            )
+
+            return True, result
+
+        except asyncio.TimeoutError:
+            logger.error(f"Chart extraction timed out after {self.timeout}s")
+            return False, {"error": "Chart extraction timeout"}
+        except Exception as e:
+            logger.error(f"Chart extraction failed: {str(e)}", exc_info=True)
+            return False, {"error": str(e)}
+
+    async def _compress_image(self, image_content: bytes) -> bytes:
+        """Compress image to meet size requirements"""
+        try:
+            img = Image.open(BytesIO(image_content))
+
+            # Convert RGBA to RGB if needed
+            if img.mode == "RGBA":
+                background = Image.new("RGB", img.size, (255, 255, 255))
+                background.paste(img, mask=img.split()[3])
+                img = background
+
+            # Resize if too large
+            max_dimension = 2048
+            if max(img.size) > max_dimension:
+                ratio = max_dimension / max(img.size)
+                new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+                img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+            # Save compressed
+            output = BytesIO()
+            img.save(output, format="JPEG", quality=85, optimize=True)
+            compressed = output.getvalue()
+
+            logger.info(
+                f"Compressed image from {len(image_content) / (1024 * 1024):.2f}MB to "
+                f"{len(compressed) / (1024 * 1024):.2f}MB"
+            )
+
+            return compressed
+
+        except Exception as e:
+            logger.error(f"Image compression failed: {str(e)}")
+            return image_content
+
+    def _detect_media_type(self, image_content: bytes) -> str:
+        """Detect image media type from content"""
+        if image_content.startswith(b"\x89PNG"):
+            return "image/png"
+        elif image_content.startswith(b"\xff\xd8\xff"):
+            return "image/jpeg"
+        elif image_content.startswith(b"GIF"):
+            return "image/gif"
+        elif image_content.startswith(b"WEBP"):
+            return "image/webp"
+        else:
+            return "image/png"  # Default fallback
+
+    def _build_extraction_prompt(
+        self, chart_type: Optional[ChartType], context: Optional[str]
+    ) -> str:
+        """Build prompt for chart extraction"""
+        prompt_parts = [
+            "Extract structured data from this chart/graph image.",
+            "",
+            "Provide a JSON response with the following structure:",
+            "{",
+            '  "chart_type": "bar|line|pie|scatter|heatmap|box_plot|histogram|area|multi_panel|unknown",',
+            '  "title": "Chart title from image",',
+            '  "x_axis": {"label": "X-axis label", "unit": "unit if present"},',
+            '  "y_axis": {"label": "Y-axis label", "unit": "unit if present"},',
+            '  "legend": ["Series 1", "Series 2", ...],',
+            '  "data": [',
+            '    {"label": "Category/X value", "value": number, "series": "series name"},',
+            "    ...",
+            "  ],",
+            '  "description": "Natural language description of the chart",',
+            '  "confidence": 0.0-1.0 (how confident you are in the extraction)',
+            "}",
+            "",
+            "Instructions:",
+            "- Extract ALL visible data points accurately",
+            "- Preserve numeric precision",
+            "- Include units and labels exactly as shown",
+            "- For multi-series charts, separate each series in the data array",
+            "- If error bars are present, include them as 'error' field",
+            "- Provide confidence score based on image quality and clarity",
+        ]
+
+        if chart_type:
+            prompt_parts.insert(
+                2, f"Expected chart type: {chart_type.value} (but verify from image)"
+            )
+
+        if context:
+            prompt_parts.insert(2, f"Context: {context}")
+
+        return "\n".join(prompt_parts)
+
+    def _parse_vision_response(self, response: Any) -> Dict:
+        """Parse Claude Vision API response"""
+        try:
+            # Extract text from response
+            text_content = ""
+            for block in response.content:
+                if hasattr(block, "text"):
+                    text_content += block.text
+
+            # Try to extract JSON from response
+            # Look for JSON block in markdown code fence or raw JSON
+            import re
+
+            json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text_content, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                # Try to find raw JSON
+                json_match = re.search(r"\{.*\}", text_content, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(0)
+                else:
+                    # No JSON found, return raw text
+                    return {
+                        "chart_type": ChartType.UNKNOWN,
+                        "description": text_content,
+                        "confidence": 0.5,
+                        "raw_response": text_content,
+                    }
+
+            # Parse JSON
+            result = json.loads(json_str)
+
+            # Validate and normalize
+            if "chart_type" not in result:
+                result["chart_type"] = ChartType.UNKNOWN
+
+            if "confidence" not in result:
+                result["confidence"] = 0.8  # Default high confidence if not provided
+
+            return result
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON response: {str(e)}")
+            return {
+                "chart_type": ChartType.UNKNOWN,
+                "description": text_content if text_content else "Failed to extract data",
+                "confidence": 0.3,
+                "error": "JSON parsing failed",
+                "raw_response": text_content,
+            }
+        except Exception as e:
+            logger.error(f"Failed to parse vision response: {str(e)}")
+            return {
+                "chart_type": ChartType.UNKNOWN,
+                "error": str(e),
+                "confidence": 0.0,
+            }
+
+
+# Singleton instance
+_chart_extraction_service: Optional[ChartExtractionService] = None
+
+
+def get_chart_extraction_service() -> ChartExtractionService:
+    """Get the singleton chart extraction service instance"""
+    global _chart_extraction_service
+    if _chart_extraction_service is None:
+        _chart_extraction_service = ChartExtractionService()
+    return _chart_extraction_service

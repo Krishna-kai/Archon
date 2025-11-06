@@ -93,30 +93,45 @@ async def process_pdf(
         # Extract results for the first (and only) PDF
         pdf_results = infer_results[0] if infer_results else []
         pdf_images = all_image_lists[0] if all_image_lists else []
+        pdf_doc = all_pdf_docs[0] if all_pdf_docs else None
 
-        # Convert layout results to markdown text
-        text_parts = []
-        for page_idx, page_result in enumerate(pdf_results, 1):
-            text_parts.append(f"## Page {page_idx}\n")
-
-            # Extract text from layout detections
+        # Count formulas and tables from layout detections
+        # MinerU uses category_id to identify different element types
+        # Based on MinerU source: category_id 13 = formula, category_id 5 = table
+        formula_count = 0
+        table_count = 0
+        for page_result in pdf_results:
             layout_dets = page_result.get('layout_dets', [])
             for det in layout_dets:
-                # Each detection has type and text
-                det_type = det.get('category_type', 'text')
-                det_text = det.get('text', '')
+                category_id = det.get('category_id', -1)
+                if category_id == 13:  # Formula
+                    formula_count += 1
+                elif category_id == 5:  # Table
+                    table_count += 1
 
-                if det_text:
-                    if det_type == 'title':
-                        text_parts.append(f"### {det_text}\n")
-                    elif det_type in ['formula', 'equation']:
-                        text_parts.append(f"$$\n{det_text}\n$$\n")
-                    elif det_type == 'table':
-                        text_parts.append(f"```\n{det_text}\n```\n")
-                    else:
-                        text_parts.append(f"{det_text}\n")
+        # Extract text using PdfDocument object (pypdfium2)
+        text_parts = []
+        total_chars_extracted = 0
 
-            text_parts.append("\n")
+        if pdf_doc:
+            page_count = len(pdf_doc)
+            for page_idx in range(page_count):
+                text_parts.append(f"## Page {page_idx + 1}\n")
+
+                try:
+                    # Get page and extract text using pypdfium2
+                    page = pdf_doc[page_idx]
+                    textpage = page.get_textpage()
+                    page_text = textpage.get_text_bounded()
+
+                    if page_text:
+                        text_parts.append(page_text)
+                        text_parts.append("\n")
+                        total_chars_extracted += len(page_text)
+
+                except Exception as e:
+                    print(f"Warning: Page {page_idx + 1} text extraction error - {str(e)}")
+                    text_parts.append("[Text extraction failed for this page]\n\n")
 
         text = "\n".join(text_parts)
 
@@ -145,6 +160,11 @@ async def process_pdf(
             except Exception as e:
                 print(f"Warning: Failed to encode image {idx}: {e}")
 
+        # Log processing summary
+        print(f"Processed {file.filename}: {len(pdf_results)} pages, "
+              f"{total_chars_extracted} chars, {formula_count} formulas, "
+              f"{table_count} tables, {len(image_data_list)} images")
+
         # Build response
         return ProcessResponse(
             success=True,
@@ -152,7 +172,11 @@ async def process_pdf(
             images=image_data_list,
             metadata={
                 "filename": file.filename,
-                "page_count": len(pdf_results),
+                "pages": len(pdf_results),  # Expected by backend
+                "page_count": len(pdf_results),  # Kept for compatibility
+                "chars_extracted": total_chars_extracted,
+                "formulas_count": formula_count,  # Expected by backend
+                "tables_count": table_count,  # Expected by backend
                 "images_extracted": len(image_data_list),
                 "extract_charts": extract_charts,
                 "chart_provider": chart_provider,

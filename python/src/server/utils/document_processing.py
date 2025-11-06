@@ -409,6 +409,7 @@ async def extract_text_from_document(
     use_mineru: bool = False,
     extract_charts: bool = False,
     chart_provider: str = "auto",
+    ocr_engine: str = "deepseek-mlx",
 ) -> tuple[str, list[dict]]:
     """
     Extract text and images from various document formats with intelligent OCR selection.
@@ -430,6 +431,7 @@ async def extract_text_from_document(
         use_mineru: Whether to use MinerU for PDF formula extraction
         extract_charts: Whether to extract chart data from images
         chart_provider: Chart extraction provider ("auto", "local", "claude")
+        ocr_engine: OCR engine to use ("deepseek-mlx", "deepseek", "tesseract")
 
     Returns:
         Tuple of (text_content, image_data_list)
@@ -446,8 +448,18 @@ async def extract_text_from_document(
             content_type.startswith("image/") or
             filename.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"))
         ):
-            text = await extract_text_from_image_ocr(file_content, filename)
-            return text, []  # Images extracted separately, not from OCR text
+            # Use MLX OCR if specified (default and recommended for Mac M4)
+            if ocr_engine == "deepseek-mlx":
+                try:
+                    text = await extract_text_from_image_ocr_mlx(file_content, filename, mode="markdown")
+                    return text, []
+                except Exception as mlx_error:
+                    logger.warning(f"MLX OCR failed for {filename}, falling back to standard OCR: {mlx_error}")
+                    text = await extract_text_from_image_ocr(file_content, filename)
+                    return text, []
+            else:
+                text = await extract_text_from_image_ocr(file_content, filename)
+                return text, []  # Images extracted separately, not from OCR text
 
         # PDF files - intelligent OCR selection based on PDF type
         if content_type == "application/pdf" or filename.lower().endswith(".pdf"):
@@ -753,6 +765,72 @@ async def extract_text_from_image_ocr(file_content: bytes, filename: str) -> str
     except Exception as e:
         logger.error(f"OCR extraction failed for {filename}: {e}")
         raise Exception(f"Failed to extract text from image using OCR") from e
+
+
+async def extract_text_from_image_ocr_mlx(
+    file_content: bytes,
+    filename: str,
+    mode: str = "markdown"
+) -> str:
+    """
+    Extract text from image files using DeepSeek-OCR MLX (Apple Silicon optimized).
+
+    Args:
+        file_content: Raw image bytes
+        filename: Name of the file
+        mode: OCR mode (markdown, plain, figure, table, formula)
+
+    Returns:
+        Extracted text content
+
+    Raises:
+        Exception: If OCR fails or service is unavailable
+    """
+    from ..services.ocr_service import get_ocr_mlx_service
+
+    logger.info(f"Using MLX OCR to extract text from image: {filename} (mode: {mode})")
+
+    # Get MLX OCR service instance
+    ocr_service = get_ocr_mlx_service()
+
+    # Check OCR service health
+    try:
+        health = await ocr_service.check_health()
+        if health.get("status") != "healthy":
+            raise Exception(
+                f"MLX OCR service is not available: {health.get('error', 'Unknown error')}"
+            )
+    except Exception as e:
+        logger.error(f"MLX OCR service health check failed: {e}")
+        raise Exception(
+            "MLX OCR service is not available. Please ensure DeepSeek-OCR MLX service is running on port 9005."
+        ) from e
+
+    # Perform OCR
+    try:
+        success, result = await ocr_service.ocr_image(
+            file_content,
+            filename,
+            mode=mode
+        )
+
+        if success:
+            extracted_text = result.get('text', '')
+            if not extracted_text or not extracted_text.strip():
+                raise ValueError(f"MLX OCR extracted no text from {filename}")
+
+            logger.info(
+                f"MLX OCR extraction successful | filename={filename} | "
+                f"length={len(extracted_text)} | backend={result.get('backend')}"
+            )
+            return extracted_text
+        else:
+            error_msg = result.get('error', 'MLX OCR failed')
+            raise Exception(f"MLX OCR failed: {error_msg}")
+
+    except Exception as e:
+        logger.error(f"MLX OCR extraction failed for {filename}: {e}")
+        raise Exception(f"Failed to extract text from image using MLX OCR") from e
 
 
 async def extract_text_from_pdf_tesseract(file_content: bytes, filename: str) -> str:

@@ -424,6 +424,43 @@ services:
       retries: 3
       start_period: 180s  # Longer startup for model loading
 
+  # DeepSeek-OCR MLX Service (Mac M4 optimized - NATIVE SERVICE RECOMMENDED)
+  # NOTE: This Docker service runs on CPU only. For Apple Metal GPU acceleration,
+  # run the native Mac service instead: ~/Projects/archon/services/deepseek-ocr-mlx/start_service.sh
+  # Configure via DEEPSEEK_OCR_MLX_URL=http://localhost:9005 in .env
+  deepseek-ocr-mlx:
+    profiles:
+      - ocr  # Starts with all OCR services using --profile ocr
+    image: python:3.12-slim
+    container_name: deepseek-ocr-mlx
+    restart: unless-stopped
+    ports:
+      - "9005:9005"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PORT=9005
+      - MODEL_NAME=mlx-community/DeepSeek-OCR-8bit
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - app-network
+    volumes:
+      - ./services/deepseek-ocr-mlx:/app
+      - deepseek-mlx-models:/root/.cache/mlx  # Model cache
+    working_dir: /app
+    command: >
+      bash -c "
+      pip install -q mlx mlx-vlm fastapi uvicorn[standard] python-multipart Pillow pydantic &&
+      uvicorn app:app --host 0.0.0.0 --port 9005
+      "
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9005/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s  # Longer for model download on first run
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
   # NOTE: MinerU Docker service removed - now using native Mac service for Apple GPU acceleration
   # See python/start_mineru_service.sh and python/src/mineru_service/main.py
   # Configure via MINERU_SERVICE_URL=http://host.docker.internal:8055 in .env
@@ -441,4 +478,5 @@ volumes:
   stirling-pdf-logs:  # Stirling PDF logs
   marker-models:  # Marker model cache for formula and table extraction
   latex-ocr-models:  # LaTeX-OCR model cache (pix2tex models)
+  deepseek-mlx-models:  # DeepSeek-OCR MLX model cache (mlx-community models)
   # NOTE: mineru-models volume removed - native service uses host filesystem

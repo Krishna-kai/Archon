@@ -280,10 +280,52 @@ async def process_pdf(
 
         # 1. Process embedded images from all_image_lists
         log_message("info", f"Processing {len(pdf_images)} embedded images...")
+
+        # DEBUG: Check what we actually got
+        if pdf_images:
+            log_message("info", f"DEBUG: pdf_images type: {type(pdf_images)}, first item type: {type(pdf_images[0]).__module__}.{type(pdf_images[0]).__name__}")
+            if isinstance(pdf_images[0], dict):
+                log_message("info", f"DEBUG: Dictionary keys: {list(pdf_images[0].keys())}")
+
         for idx, img_obj in enumerate(pdf_images):
             try:
-                if isinstance(img_obj, Image.Image):
+                # Handle dict format from MinerU
+                if isinstance(img_obj, dict):
+                    # MinerU returns dicts with image data - check for common keys
+                    pil_img = None
+
+                    # Try common key names
+                    for key in ['img_pil', 'image', 'img']:
+                        if key in img_obj:
+                            if isinstance(img_obj[key], Image.Image):
+                                pil_img = img_obj[key]
+                                break
+                            else:
+                                log_message("warning", f"Embedded image {idx} dict['{key}'] is not PIL Image (type: {type(img_obj[key])})")
+
+                    if pil_img is None:
+                        log_message("warning", f"Embedded image {idx} is dict but has no PIL Image in keys: {list(img_obj.keys())}")
+                        continue
+
                     # Convert PIL Image to bytes
+                    img_buffer = io.BytesIO()
+                    pil_img.save(img_buffer, format='PNG')
+                    img_bytes = img_buffer.getvalue()
+
+                    # Encode to base64
+                    img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+
+                    # Add to list
+                    image_data_list.append(ImageData(
+                        name=f"embedded_{idx}.png",
+                        base64=img_base64,
+                        page_number=img_obj.get('page_number', None),
+                        image_index=idx,
+                        mime_type="image/png"
+                    ))
+
+                elif isinstance(img_obj, Image.Image):
+                    # Direct PIL Image (legacy format)
                     img_buffer = io.BytesIO()
                     img_obj.save(img_buffer, format='PNG')
                     img_bytes = img_buffer.getvalue()
@@ -299,13 +341,19 @@ async def process_pdf(
                         image_index=idx,
                         mime_type="image/png"
                     ))
+                else:
+                    log_message("warning", f"Embedded image {idx} is neither dict nor PIL Image (type: {type(img_obj).__module__}.{type(img_obj).__name__}), skipping")
             except Exception as e:
                 log_message("warning", f"Failed to encode embedded image {idx}: {e}")
 
         # 2. Extract image regions from layout detection
+        # DEBUG: Check if pdf_doc and pdf_results are available
+        log_message("info", f"DEBUG: pdf_doc={pdf_doc is not None}, pdf_results={len(pdf_results) if pdf_results else 0} pages")
         if pdf_doc and pdf_results:
             log_message("info", f"Extracting {image_count} detected image regions...")
             region_idx = 0
+            regions_found = 0
+            regions_extracted = 0
 
             for page_idx, page_result in enumerate(pdf_results):
                 layout_dets = page_result.get('layout_dets', [])
@@ -315,10 +363,12 @@ async def process_pdf(
 
                     # Extract images and figures (category 0 or 3)
                     if category_id in [0, 3]:
+                        regions_found += 1
                         try:
                             # Get bounding box [x0, y0, x1, y1]
                             bbox = det.get('bbox', [])
                             if len(bbox) != 4:
+                                log_message("warning", f"Skipping region on page {page_idx + 1}: invalid bbox length {len(bbox)}, bbox={bbox}")
                                 continue
 
                             x0, y0, x1, y1 = bbox
@@ -354,9 +404,12 @@ async def process_pdf(
                                 mime_type="image/png"
                             ))
                             region_idx += 1
+                            regions_extracted += 1
 
                         except Exception as e:
-                            log_message("warning", f"Failed to extract region on page {page_idx + 1}: {e}")
+                            log_message("warning", f"Failed to extract region on page {page_idx + 1}, bbox {bbox}: {e}")
+
+            log_message("info", f"DEBUG: Regions found={regions_found}, extracted={regions_extracted}, total_images_in_list={len(image_data_list)}")
 
         processing_time = time.time() - start_time
 
