@@ -12,9 +12,11 @@ from pathlib import Path
 from typing import Optional
 from PIL import Image
 import io
+import fitz  # PyMuPDF for image extraction
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from pydantic import BaseModel
 
@@ -25,6 +27,15 @@ app = FastAPI(
     title="MinerU Native Service",
     description="Native MinerU PDF processing service for Apple Silicon",
     version="1.0.0"
+)
+
+# Add CORS middleware to allow browser access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for local development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -135,30 +146,51 @@ async def process_pdf(
 
         text = "\n".join(text_parts)
 
-        # Process extracted images
+        # Extract images using PyMuPDF (more reliable than MinerU for raw image extraction)
         image_data_list = []
-        for idx, img_obj in enumerate(pdf_images):
-            try:
-                # img_obj is a PIL Image
-                if isinstance(img_obj, Image.Image):
-                    # Convert PIL Image to bytes
-                    img_buffer = io.BytesIO()
-                    img_obj.save(img_buffer, format='PNG')
-                    img_bytes = img_buffer.getvalue()
+        try:
+            pdf_doc_fitz = fitz.open(stream=content, filetype="pdf")
+            img_idx = 0
 
-                    # Encode to base64
-                    img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+            for page_num in range(len(pdf_doc_fitz)):
+                page = pdf_doc_fitz[page_num]
+                images = page.get_images()
 
-                    # Add to list
-                    image_data_list.append(ImageData(
-                        name=f"image_{idx}.png",
-                        base64=img_base64,
-                        page_number=None,  # Page info not available in this format
-                        image_index=idx,
-                        mime_type="image/png"
-                    ))
-            except Exception as e:
-                print(f"Warning: Failed to encode image {idx}: {e}")
+                for img in images:
+                    try:
+                        xref = img[0]  # xref is the image reference
+                        base_image = pdf_doc_fitz.extract_image(xref)
+
+                        if base_image:
+                            img_bytes = base_image["image"]
+                            img_ext = base_image["ext"]
+
+                            # Convert to PIL Image to standardize format
+                            pil_image = Image.open(io.BytesIO(img_bytes))
+
+                            # Convert to PNG
+                            png_buffer = io.BytesIO()
+                            pil_image.save(png_buffer, format='PNG')
+                            png_bytes = png_buffer.getvalue()
+
+                            # Encode to base64
+                            img_base64 = base64.b64encode(png_bytes).decode('utf-8')
+
+                            image_data_list.append(ImageData(
+                                name=f"page{page_num + 1}_image{img_idx + 1}.png",
+                                base64=img_base64,
+                                page_number=page_num + 1,
+                                image_index=img_idx,
+                                mime_type="image/png"
+                            ))
+                            img_idx += 1
+                    except Exception as e:
+                        print(f"Warning: Failed to extract image {img_idx} from page {page_num + 1}: {e}")
+
+            pdf_doc_fitz.close()
+        except Exception as e:
+            print(f"Warning: Image extraction failed: {e}")
+            # Continue without images rather than failing
 
         # Log processing summary
         print(f"Processed {file.filename}: {len(pdf_results)} pages, "

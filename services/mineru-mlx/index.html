@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MinerU Unified Service</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 60px;
+            max-width: 600px;
+            text-align: center;
+        }
+        h1 {
+            color: #667eea;
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+        .status {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #10b981;
+            color: white;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+        .description {
+            color: #666;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+            line-height: 1.6;
+        }
+        .features {
+            text-align: left;
+            margin-bottom: 40px;
+        }
+        .features h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        .features ul {
+            list-style: none;
+        }
+        .features li {
+            padding: 8px 0;
+            color: #555;
+        }
+        .features li:before {
+            content: "✓ ";
+            color: #10b981;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .button {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+        .button:hover {
+            transform: translateY(-2px);
+        }
+        .links {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 1px solid #eee;
+        }
+        .links a {
+            display: inline-block;
+            margin: 0 15px;
+            color: #667eea;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+        .links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 MinerU Unified Service</h1>
+        <div class="status" id="status">Checking...</div>
+
+        <p class="description">
+            Domain-agnostic PDF processing with AI enhancement. Extract text, formulas, tables,
+            and images from research papers, technical documents, and more.
+        </p>
+
+        <div class="features">
+            <h3>Features</h3>
+            <ul>
+                <li>Text Extraction (pypdfium2)</li>
+                <li>Formula Detection (27 detected in test paper)</li>
+                <li>Table Recognition (structured data)</li>
+                <li>Image Extraction (PyMuPDF)</li>
+                <li>LLM Integration (Ollama)</li>
+                <li>Keyword Filtering</li>
+                <li>AI-Enhanced Analysis</li>
+            </ul>
+        </div>
+
+        <a href="mineru_ui.html" class="button">Launch UI</a>
+
+        <div class="links">
+            <a href="http://localhost:9006/health" target="_blank">Health Check</a>
+            <a href="http://localhost:9006/docs" target="_blank">API Docs</a>
+            <a href="http://localhost:9006/models" target="_blank">Available Models</a>
+        </div>
+    </div>
+
+    <script>
+        // Check service health
+        fetch('http://localhost:9006/health')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('status').textContent = '✅ Service Running';
+                document.getElementById('status').style.background = '#10b981';
+            })
+            .catch(() => {
+                document.getElementById('status').textContent = '⚠️ Service Offline';
+                document.getElementById('status').style.background = '#ef4444';
+            });
+    </script>
+</body>
+</html>

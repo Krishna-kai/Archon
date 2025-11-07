@@ -461,9 +461,54 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  # NOTE: MinerU Docker service removed - now using native Mac service for Apple GPU acceleration
-  # See python/start_mineru_service.sh and python/src/mineru_service/main.py
-  # Configure via MINERU_SERVICE_URL=http://host.docker.internal:8055 in .env
+  # MinerU Unified Service (Mac GPU optimized - NATIVE SERVICE)
+  # Unified service with full PDF processing + LLM integration
+  # Runs natively on the host for Apple Metal GPU (MPS) access
+  # Port: 9006 | Features: Text, Formulas, Tables, Images, LLM Enhancement
+  mineru:
+    profiles:
+      - ocr  # Starts with all OCR services using --profile ocr
+    image: python:3.12-slim
+    container_name: mineru-unified
+    restart: unless-stopped
+    ports:
+      - "9006:9006"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PORT=9006
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MINERU_SERVICE_URL=http://host.docker.internal:9006
+    networks:
+      - app-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: >
+      bash -c "
+      echo '════════════════════════════════════════════════════════';
+      echo '🚀 MinerU Unified Service (Native Mode)';
+      echo '════════════════════════════════════════════════════════';
+      echo '📍 Port: 9006';
+      echo '🔥 Backend: MinerU + Ollama LLM Integration';
+      echo '📊 Features: Text, Formulas, Tables, Images, AI Enhancement';
+      echo '🎯 UI: http://localhost:9006 (Advanced)';
+      echo '🖥️  Platform: Apple Silicon with Metal GPU';
+      echo '════════════════════════════════════════════════════════';
+      echo '';
+      echo '⚠️  This container is a placeholder.';
+      echo '⚙️  To start the native service with GPU acceleration:';
+      echo '    cd ~/Projects/archon/services/mineru-mlx';
+      echo '    PORT=9006 uvicorn app:app --host 0.0.0.0 --port 9006 --reload';
+      echo '';
+      echo '✅ Service health: http://localhost:9006/health';
+      echo '📖 API docs: http://localhost:9006/docs';
+      tail -f /dev/null
+      "
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://host.docker.internal:9006/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
 networks:
   app-network:

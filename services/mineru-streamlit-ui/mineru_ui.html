@@ -368,7 +368,7 @@
     </div>
 
     <script>
-        const MINERU_SERVICE_URL = 'http://localhost:9006';
+        const MINERU_SERVICE_URL = 'http://localhost:8055';
         let currentResult = null;
         let currentFilename = '';
 
@@ -453,19 +453,22 @@
             const resultsDiv = document.getElementById('results');
             resultsDiv.style.display = 'block';
 
-            const { markdown = '', images = [], num_pages = 'N/A' } = currentResult;
+            // Backend returns "text", not "markdown"
+            const text = currentResult.text || currentResult.markdown || '';
+            const images = currentResult.images || [];
+            const numPages = currentResult.metadata?.page_count || currentResult.metadata?.pages || 'N/A';
 
             // Display stats
-            displayStats(markdown, images, num_pages);
+            displayStats(text, images, numPages);
 
             // Display markdown
-            displayMarkdown(markdown);
+            displayMarkdown(text);
 
             // Display images
             displayImages(images);
 
             // Display variables
-            displayVariables(markdown);
+            displayVariables(text);
         }
 
         function displayStats(markdown, images, numPages) {
@@ -628,14 +631,16 @@
 
         // Download functions
         function downloadMarkdown() {
-            if (!currentResult || !currentResult.markdown) return;
-            downloadFile(currentResult.markdown, `${getBasename()}_content.md`, 'text/markdown');
+            const text = currentResult?.text || currentResult?.markdown || '';
+            if (!text) return;
+            downloadFile(text, `${getBasename()}_content.md`, 'text/markdown');
         }
 
         function downloadVariablesCSV() {
-            if (!currentResult || !currentResult.markdown) return;
+            const text = currentResult?.text || currentResult?.markdown || '';
+            if (!text) return;
 
-            const variables = extractVariables(currentResult.markdown);
+            const variables = extractVariables(text);
             if (variables.length === 0) {
                 alert('No variables to export');
                 return;
