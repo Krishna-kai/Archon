@@ -1,10 +1,10 @@
 {
   "id": "histopathology_research_hierarchical",
   "name": "Histopathology Research Paper (Hierarchical)",
-  "description": "Hierarchical template for histopathology research papers with grouped fields (21 variables in 6 logical groups)",
+  "description": "Hierarchical template for histopathology research papers with grouped fields (21 variables in 6 logical groups). Expected null rate: 40-50% for typical papers. Recommended model: qwen2.5-coder:7b (avg. 45s). Larger models may timeout.",
   "category": "medical_research",
   "system_prompt": "You are an expert in medical research paper analysis, specializing in histopathology and medical imaging. Extract structured data with precision, organizing information into logical hierarchical groups.",
-  "user_prompt_template": "Extract information from this histopathology research paper as valid JSON with hierarchical structure.\n\nIMPORTANT RULES:\n1. Use null for any information you cannot find\n2. Be precise - only extract what is explicitly stated\n3. Do not make assumptions or infer information\n4. Organize data into the specified hierarchical groups\n5. Return ONLY valid JSON, no explanations, no markdown\n\nExtract these variables organized in groups:\n{variables_list}\n\nDocument excerpt:\n---\n{text}\n---\n\nRespond with ONLY a JSON object following this exact hierarchical schema:\n{json_schema}",
+  "user_prompt_template": "Extract information from this histopathology research paper as valid JSON with hierarchical structure.\n\nIMPORTANT RULES:\n1. Use null for any information you cannot find - this is expected and acceptable\n2. Be precise - only extract what is explicitly stated in the text\n3. Do not make assumptions or infer information not present\n4. For discussion fields (limitations, future_work, clinical_application): look in conclusion, discussion, or future work sections\n5. Organize data into the specified hierarchical groups\n6. Return ONLY valid JSON, no explanations, no markdown\n\nExtract these variables organized in groups:\n{variables_list}\n\nDocument excerpt:\n---\n{text}\n---\n\nRespond with ONLY a JSON object following this exact hierarchical schema:\n{json_schema}",
   "variables": [
     {
       "name": "publication",
