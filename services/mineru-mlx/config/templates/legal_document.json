@@ -1,0 +1,69 @@
+{
+  "id": "legal_document",
+  "name": "Legal Document",
+  "description": "Template for legal contracts, agreements, briefs, and legal filings",
+  "category": "legal",
+  "system_prompt": "You are a legal document analysis assistant. Extract structured data from legal documents with precision and accuracy.",
+  "user_prompt_template": "Extract information from this legal document as valid JSON.\n\nIMPORTANT RULES:\n1. Use null for any information you cannot find\n2. Be precise - only extract what is explicitly stated\n3. Do not make assumptions or infer information\n4. Return ONLY valid JSON, no explanations, no markdown\n\nExtract these variables:\n{variables_list}\n\nDocument excerpt:\n---\n{text}\n---\n\nRespond with ONLY a JSON object following this exact schema:\n{json_schema}",
+  "variables": [
+    {
+      "name": "document_type",
+      "description": "Type of legal document (contract, agreement, brief, etc.)",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "parties",
+      "description": "Names of parties involved in the legal matter",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "jurisdiction",
+      "description": "Legal jurisdiction or court",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "effective_date",
+      "description": "Effective date of the document or agreement",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "termination_date",
+      "description": "Termination or expiration date",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "key_terms",
+      "description": "Key terms, clauses, or provisions",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "obligations",
+      "description": "Primary obligations of the parties",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "governing_law",
+      "description": "Governing law or legal framework",
+      "type": "string",
+      "required": false
+    }
+  ],
+  "parameters": {
+    "max_text_length": 30000,
+    "temperature": 0.0,
+    "max_tokens": 2500,
+    "timeout": 120
+  },
+  "output_format": {
+    "null_handling": "Use null for missing data (not 'N/A' or empty string)",
+    "strict_schema": true,
+    "include_confidence": false
+  }
+}

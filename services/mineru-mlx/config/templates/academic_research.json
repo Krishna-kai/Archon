@@ -1,0 +1,81 @@
+{
+  "id": "academic_research",
+  "name": "Academic Research Paper",
+  "description": "Template for academic research papers (IEEE, ACM, arXiv, etc.)",
+  "category": "research",
+  "system_prompt": "You are an academic research paper analysis assistant. Extract structured data from research papers with precision.",
+  "user_prompt_template": "Extract information from this research paper as valid JSON.\n\nIMPORTANT RULES:\n1. Use null for any information you cannot find\n2. Be precise - only extract what is explicitly stated\n3. Do not make assumptions or infer information\n4. Return ONLY valid JSON, no explanations, no markdown\n\nExtract these variables:\n{variables_list}\n\nDocument excerpt:\n---\n{text}\n---\n\nRespond with ONLY a JSON object following this exact schema:\n{json_schema}",
+  "variables": [
+    {
+      "name": "dataset",
+      "description": "Names of datasets or data sources used in the research",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "domain",
+      "description": "Research domain or field (e.g., computer vision, NLP, robotics, medicine)",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "method",
+      "description": "Primary research method, approach, or technique name",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "architecture",
+      "description": "Specific model, system architecture, or framework used",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "metrics",
+      "description": "Evaluation metrics used to measure performance",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "performance",
+      "description": "Key performance results and findings",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "baseline",
+      "description": "Baseline methods or systems compared against",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "contributions",
+      "description": "Main contributions claimed by the authors",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "limitations",
+      "description": "Limitations mentioned by the authors",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "future_work",
+      "description": "Future research directions proposed",
+      "type": "string",
+      "required": false
+    }
+  ],
+  "parameters": {
+    "max_text_length": 20000,
+    "temperature": 0.1,
+    "max_tokens": 2000,
+    "timeout": 120
+  },
+  "output_format": {
+    "null_handling": "Use null for missing data (not 'N/A' or empty string)",
+    "strict_schema": true,
+    "include_confidence": false
+  }
+}

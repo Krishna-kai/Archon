@@ -1,0 +1,69 @@
+{
+  "id": "general_document",
+  "name": "General Document",
+  "description": "Template for general purpose document extraction - flexible for any document type",
+  "category": "general",
+  "system_prompt": "You are a document analysis assistant. Extract structured data from documents accurately and comprehensively.",
+  "user_prompt_template": "Extract information from this document as valid JSON.\n\nIMPORTANT RULES:\n1. Use null for any information you cannot find\n2. Be precise - only extract what is explicitly stated\n3. Do not make assumptions or infer information\n4. Return ONLY valid JSON, no explanations, no markdown\n\nExtract these variables:\n{variables_list}\n\nDocument excerpt:\n---\n{text}\n---\n\nRespond with ONLY a JSON object following this exact schema:\n{json_schema}",
+  "variables": [
+    {
+      "name": "title",
+      "description": "Title or subject of the document",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "author",
+      "description": "Author or creator of the document",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "date",
+      "description": "Date of the document",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "document_type",
+      "description": "Type or category of document",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "summary",
+      "description": "Brief summary of the document content",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "key_points",
+      "description": "Main points or findings in the document",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "entities",
+      "description": "Important entities mentioned (people, organizations, locations)",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "notes",
+      "description": "Additional notes or observations",
+      "type": "string",
+      "required": false
+    }
+  ],
+  "parameters": {
+    "max_text_length": 20000,
+    "temperature": 0.2,
+    "max_tokens": 2000,
+    "timeout": 120
+  },
+  "output_format": {
+    "null_handling": "Use null for missing data (not 'N/A' or empty string)",
+    "strict_schema": true,
+    "include_confidence": false
+  }
+}

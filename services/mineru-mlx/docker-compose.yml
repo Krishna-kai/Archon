@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  mineru-ocr:
+    build: .
+    container_name: mineru-ocr
+    ports:
+      - "9006:9006"
+    environment:
+      - PORT=9006
+      - HOST=0.0.0.0
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ./data:/app/data  # For uploaded files
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - aiundecided-network
+
+networks:
+  aiundecided-network:
+    external: true
+    name: aiundecided-network

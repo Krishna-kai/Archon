@@ -325,79 +325,402 @@
             <!-- Status Messages -->
             <div id="statusMessage" class="status"></div>
 
-            <!-- Processing Button -->
-            <div style="text-align: center;">
+            <!-- Processing Buttons -->
+            <div style="text-align: center; display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
                 <button id="processBtn" class="button" style="display:none;">🚀 Process Document</button>
+                <button id="extractImagesBtn" class="button" style="display:none; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">📸 Extract Images Only (Fast)</button>
             </div>
 
             <!-- Results Section -->
-            <div id="results" style="display:none;">
+            <div id="tabsContainer" style="display:none;">
                 <!-- Stats -->
                 <div class="stats" id="stats"></div>
 
-                <!-- Extraction Controls -->
-                <div id="extractionControls" style="display: none; margin: 20px 0; padding: 20px; background: linear-gradient(135deg, #1a1a2e, #16213e); border-radius: 10px; border: 1px solid #00ffcc;">
-                    <h3 style="color: #00ffcc; margin-bottom: 15px;">🤖 AI Variable Extraction</h3>
-                    <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
-                        <div style="flex: 1; min-width: 200px;">
-                            <label for="modelSelect" style="color: #fff; display: block; margin-bottom: 5px;">Select Model:</label>
-                            <select id="modelSelect" class="button" style="width: 100%; padding: 10px; background: #0f3460; color: #fff; border: 1px solid #00ffcc;">
-                                <option value="">Loading models...</option>
-                            </select>
-                        </div>
-                        <button id="extractButton" onclick="extractStructuredData()" class="button" style="background: linear-gradient(135deg, #00d9ff, #00ffcc); color: #1a1a2e; font-weight: bold;">
-                            Extract Variables
-                        </button>
-                    </div>
-                    <div id="extractionStatus" style="display: none; margin-top: 15px; padding: 10px; border-radius: 5px; background: rgba(0, 255, 204, 0.1); border-left: 3px solid #00ffcc; color: #fff;"></div>
-                </div>
-
                 <!-- Tabs -->
                 <div class="tabs">
-                    <button class="tab active" data-tab="markdown">📝 Markdown</button>
-                    <button class="tab" data-tab="images">🖼️ Images</button>
-                    <button class="tab" data-tab="variables">📊 Variables</button>
-                    <button class="tab" data-tab="extracted">🎯 Extracted</button>
-                    <button class="tab" data-tab="export">💾 Export</button>
+                    <button class="tab active" data-tab="process"><span style="font-weight: 700; color: #667eea;">Step 1:</span> 📄 Process PDF</button>
+                    <button class="tab" data-tab="variables"><span style="font-weight: 700; color: #667eea;">Step 2:</span> 📋 Define Variables</button>
+                    <button class="tab" data-tab="extract"><span style="font-weight: 700; color: #667eea;">Step 3:</span> 🤖 Extract Data</button>
+                    <button class="tab" data-tab="results"><span style="font-weight: 700; color: #667eea;">Step 4:</span> 💾 Results & Export</button>
                 </div>
 
                 <!-- Tab Contents -->
-                <div id="markdown" class="tab-content active">
+
+                <!-- Tab 1: Process PDF -->
+                <div id="process" class="tab-content active">
+                    <h3 style="color: #667eea; margin-bottom: 15px;">📄 Document Processing</h3>
+
+                    <!-- Processing Feedback -->
+                    <div id="processingFeedback" style="display: none; margin-bottom: 20px; padding: 15px; background: #f8f9ff; border-radius: 8px; border-left: 4px solid #667eea;">
+                        <div id="feedbackSteps"></div>
+                    </div>
+
+                    <!-- Document Stats -->
+                    <div id="documentStats" style="display: none; margin-bottom: 20px; padding: 15px; background: #f0f9ff; border-radius: 8px;">
+                        <h4 style="color: #667eea; margin: 0 0 10px 0;">📊 Document Statistics</h4>
+                        <div id="statsContent"></div>
+                    </div>
+
+                    <!-- Markdown Preview -->
                     <div class="markdown-preview" id="markdownContent"></div>
-                    <button class="button" onclick="downloadMarkdown()">⬇️ Download Markdown</button>
-                </div>
 
-                <div id="images" class="tab-content">
+                    <!-- Images Gallery -->
                     <div class="image-gallery" id="imageGallery"></div>
+
+                    <!-- Download Button -->
+                    <button class="button" onclick="downloadMarkdown()" style="margin-top: 15px;">⬇️ Download Markdown</button>
                 </div>
 
+                <!-- Tab 2: Define Variables -->
                 <div id="variables" class="tab-content">
+                    <h3 style="color: #667eea; margin-bottom: 15px;">📋 Variable Definition</h3>
+
+                    <!-- Radio Button Choice -->
+                    <div style="margin-bottom: 20px; padding: 15px; background: #f8f9ff; border-radius: 8px;">
+                        <h4 style="color: #667eea; margin: 0 0 15px 0;">Choose Variable Source:</h4>
+                        <div style="display: flex; gap: 30px;">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="radio" name="varSource" value="predefined" checked onchange="toggleVariableSource()" style="margin-right: 8px; cursor: pointer;">
+                                <span style="font-size: 16px;">📝 Use Predefined Keywords</span>
+                            </label>
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="radio" name="varSource" value="custom" onchange="toggleVariableSource()" style="margin-right: 8px; cursor: pointer;">
+                                <span style="font-size: 16px;">📁 Upload Custom CSV/XLSX</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Predefined Keywords Display -->
+                    <div id="predefinedSection" style="margin-bottom: 20px; padding: 15px; background: #f0f9ff; border-radius: 8px;">
+                        <h4 style="color: #667eea; margin: 0 0 10px 0;">Default Research Paper Variables:</h4>
+                        <div id="predefinedList"></div>
+                    </div>
+
+                    <!-- Custom CSV/XLSX Upload -->
+                    <div id="customSection" style="display: none; margin-bottom: 20px; padding: 15px; background: #f0f9ff; border-radius: 8px; border: 2px dashed #667eea;">
+                        <h4 style="color: #667eea; margin: 0 0 10px 0;">📊 Upload Variable Template</h4>
+                        <p style="color: #666; font-size: 14px; margin: 0 0 15px 0;">Upload a CSV or XLSX file with variable definitions (variable_name, description, expected_type, required)</p>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <input type="file" id="csvTemplateInput" accept=".csv,.xlsx" style="flex: 1; padding: 10px; border: 1px solid #667eea; border-radius: 5px;">
+                            <button onclick="uploadCSVTemplate()" class="button">Upload</button>
+                            <button onclick="clearCSVTemplate()" class="button" style="background: #e74c3c;">Clear</button>
+                        </div>
+                        <div id="csvTemplateStatus" style="display: none; margin-top: 10px; color: #667eea; font-size: 14px;"></div>
+                    </div>
+
+                    <!-- Variables Preview Table -->
                     <div id="variablesTable"></div>
                 </div>
 
-                <div id="extracted" class="tab-content">
-                    <div id="extractedContent" style="text-align: center; color: #aaa; padding: 40px;">
-                        <p>No extracted variables yet.</p>
-                        <p style="font-size: 14px;">Process a PDF and click "Extract Variables" to see structured data.</p>
+                <!-- Tab 3: Extract Data -->
+                <div id="extract" class="tab-content">
+                    <h3 style="color: #667eea; margin-bottom: 15px;">🤖 AI Data Extraction</h3>
+
+                    <!-- Current Variables Summary -->
+                    <div id="currentVariablesSummary" style="margin-bottom: 20px; padding: 15px; background: #f8f9ff; border-radius: 8px;">
+                        <h4 style="color: #667eea; margin: 0 0 10px 0;">Variables to Extract:</h4>
+                        <div id="variablesSummaryContent"></div>
                     </div>
+
+                    <!-- LLM Selection -->
+                    <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 15px;">
+                        <div style="flex: 1; min-width: 200px;">
+                            <label for="llmProvider" style="display: block; margin-bottom: 5px; color: #667eea; font-weight: 600;">LLM Provider:</label>
+                            <select id="llmProvider" class="button" onchange="updateModelOptions()" style="width: 100%; padding: 10px;">
+                                <option value="ollama">Ollama (Local)</option>
+                                <option value="openai">OpenAI (Cloud)</option>
+                                <option value="claude">Claude (Cloud)</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label for="modelSelect" style="display: block; margin-bottom: 5px; color: #667eea; font-weight: 600;">Select Model:</label>
+                            <select id="modelSelect" class="button" style="width: 100%; padding: 10px;">
+                                <option value="">Loading models...</option>
+                            </select>
+                        </div>
+                        <button id="extractButton" onclick="extractStructuredData()" class="button" style="padding: 12px 30px; font-weight: bold;">
+                            🚀 Extract Variables
+                        </button>
+                    </div>
+
+                    <!-- Extraction Status -->
+                    <div id="extractionStatus" style="display: none; margin-top: 15px; padding: 15px; border-radius: 8px; background: #f0f9ff; border-left: 4px solid #667eea; color: #333;"></div>
                 </div>
 
-                <div id="export" class="tab-content">
-                    <h3>Export Options</h3>
-                    <button class="button" onclick="downloadMarkdown()">Download Markdown (.md)</button>
-                    <button class="button" onclick="downloadVariablesCSV()">Download Variables (.csv)</button>
-                    <button class="button" onclick="downloadJSON()">Download Full JSON</button>
+                <!-- Tab 4: Results & Export -->
+                <div id="results" class="tab-content">
+                    <h3 style="color: #667eea; margin-bottom: 15px;">💾 Extraction Results</h3>
+
+                    <!-- Extracted Data Display -->
+                    <div id="extractedContent" style="margin-bottom: 20px;">
+                        <div style="text-align: center; color: #aaa; padding: 40px;">
+                            <p style="font-size: 18px;">📋 No extracted data yet</p>
+                            <p style="font-size: 14px;">Go to "Extract Data" tab and run the extraction</p>
+                        </div>
+                    </div>
+
+                    <!-- Export Options -->
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 20px;">
+                        <button class="button" onclick="downloadJSON()">📥 Download JSON</button>
+                        <button class="button" onclick="downloadVariablesCSV()">📊 Download CSV</button>
+                        <button class="button" onclick="downloadMarkdown()">📝 Download Markdown</button>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
+                        <button class="button" onclick="switchToExtractTab()" style="background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);">
+                            🔄 Extract with Different LLM
+                        </button>
+                        <button class="button" onclick="resetForNewDocument()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin-left: 10px;">
+                            📄 Process New Document
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        const MINERU_SERVICE_URL = 'http://localhost:9006';
+        const MINERU_SERVICE_URL = '';  // Use relative URLs (works for both localhost and production)
         let currentResult = null;
         let currentFilename = '';
         let availableModels = [];
         let extractedVariables = null;
+        let csvTemplateData = null;
+
+        // LLM Provider Models Configuration
+        const LLM_MODELS = {
+            ollama: [],  // Will be populated from API
+            openai: [
+                { value: 'gpt-4', label: 'GPT-4' },
+                { value: 'gpt-4-turbo-preview', label: 'GPT-4 Turbo' },
+                { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' }
+            ],
+            claude: [
+                { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+                { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' },
+                { value: 'claude-3-sonnet-20240229', label: 'Claude 3 Sonnet' },
+                { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku' }
+            ]
+        };
+
+        // Predefined Research Paper Variables
+        const PREDEFINED_VARIABLES = [
+            { variable_name: 'title', description: 'Full title of the research paper', expected_type: 'string', required: 'yes' },
+            { variable_name: 'authors', description: 'List of authors', expected_type: 'string', required: 'yes' },
+            { variable_name: 'year', description: 'Publication year', expected_type: 'integer', required: 'yes' },
+            { variable_name: 'venue', description: 'Conference or journal name', expected_type: 'string', required: 'no' },
+            { variable_name: 'abstract', description: 'Paper abstract summary', expected_type: 'text', required: 'no' },
+            { variable_name: 'methodology', description: 'Research methodology used', expected_type: 'text', required: 'yes' },
+            { variable_name: 'dataset', description: 'Name of dataset used', expected_type: 'string', required: 'no' },
+            { variable_name: 'architecture', description: 'Model/system architecture', expected_type: 'string', required: 'no' },
+            { variable_name: 'metrics', description: 'Evaluation metrics used', expected_type: 'string', required: 'no' },
+            { variable_name: 'performance', description: 'Key performance results', expected_type: 'text', required: 'no' },
+            { variable_name: 'limitations', description: 'Study limitations', expected_type: 'text', required: 'no' },
+            { variable_name: 'future_work', description: 'Proposed future research directions', expected_type: 'text', required: 'no' }
+        ];
+
+        // Load Available Providers on Page Load
+        async function loadProviders() {
+            try {
+                const response = await fetch(`${MINERU_SERVICE_URL}/providers`);
+                const data = await response.json();
+
+                console.log('Available providers:', data);
+
+                // Update LLM provider dropdown to show only available providers
+                const providerSelect = document.getElementById('llmProvider');
+                providerSelect.innerHTML = '';
+
+                data.providers.forEach(provider => {
+                    const option = document.createElement('option');
+                    option.value = provider;
+                    const details = data.details[provider];
+                    option.text = `${provider.charAt(0).toUpperCase() + provider.slice(1)} ${provider === 'ollama' ? '(Local)' : '(Cloud)'}`;
+                    option.disabled = !details.available;
+                    providerSelect.appendChild(option);
+                });
+
+                // Trigger model load for default provider
+                await updateModelOptions();
+            } catch (error) {
+                console.error('Error loading providers:', error);
+                showStatus('⚠️ Failed to load LLM providers', 'error');
+            }
+        }
+
+        // Toggle between predefined and custom variable sources
+        function toggleVariableSource() {
+            const radios = document.getElementsByName('varSource');
+            const predefinedSection = document.getElementById('predefinedSection');
+            const customSection = document.getElementById('customSection');
+
+            // Null check: elements might not exist yet if tabs aren't visible
+            if (!predefinedSection || !customSection) {
+                console.log('Variable source elements not found yet');
+                return;
+            }
+
+            let selectedValue = '';
+            radios.forEach(radio => {
+                if (radio.checked) selectedValue = radio.value;
+            });
+
+            if (selectedValue === 'predefined') {
+                predefinedSection.style.display = 'block';
+                customSection.style.display = 'none';
+                csvTemplateData = PREDEFINED_VARIABLES;
+                renderPredefinedVariables();
+            } else {
+                predefinedSection.style.display = 'none';
+                customSection.style.display = 'block';
+                // Don't change csvTemplateData - let user upload custom file
+            }
+        }
+
+        // Render predefined variables list
+        function renderPredefinedVariables() {
+            const list = document.getElementById('predefinedList');
+            if (!list) return; // Element doesn't exist yet
+
+            const html = `
+                <div style="display: grid; gap: 8px;">
+                    ${PREDEFINED_VARIABLES.map(v => `
+                        <div style="padding: 8px; background: white; border-radius: 5px; border-left: 3px solid #667eea;">
+                            <strong>${v.variable_name}</strong>: ${v.description}
+                            <span style="color: #666; font-size: 12px;">(${v.expected_type}${v.required === 'yes' ? ', required' : ''})</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            list.innerHTML = html;
+        }
+
+        // Helper functions for tab navigation
+        function switchToExtractTab() {
+            document.querySelector('[data-tab="extract"]').click();
+        }
+
+        function resetForNewDocument() {
+            // Clear current results
+            currentResult = null;
+            currentFilename = '';
+            extractedVariables = null;
+
+            // Hide results section
+            document.getElementById('tabsContainer').style.display = 'none';
+
+            // Reset file input
+            document.getElementById('fileInput').value = '';
+
+            // Switch to first tab
+            document.querySelector('[data-tab="process"]').click();
+
+            // Clear displays
+            document.getElementById('markdownContent').innerHTML = '';
+            document.getElementById('imageGallery').innerHTML = '';
+            document.getElementById('extractedContent').innerHTML = `
+                <div style="text-align: center; color: #aaa; padding: 40px;">
+                    <p style="font-size: 18px;">📋 No extracted data yet</p>
+                    <p style="font-size: 14px;">Go to "Extract Data" tab and run the extraction</p>
+                </div>
+            `;
+        }
+
+        // CSV Template Functions
+        async function uploadCSVTemplate() {
+            const fileInput = document.getElementById('csvTemplateInput');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert('Please select a CSV file first');
+                return;
+            }
+
+            try {
+                const text = await file.text();
+                csvTemplateData = parseCSV(text);
+
+                document.getElementById('csvTemplateStatus').innerHTML =
+                    `✅ Loaded ${csvTemplateData.length} variables from ${file.name}`;
+                document.getElementById('csvTemplateStatus').style.display = 'block';
+
+                console.log('CSV template loaded:', csvTemplateData);
+            } catch (error) {
+                alert(`Error parsing CSV: ${error.message}`);
+            }
+        }
+
+        function parseCSV(text) {
+            const lines = text.split('\n').filter(line => line.trim());
+            if (lines.length < 2) {
+                throw new Error('CSV must have at least a header row and one data row');
+            }
+
+            const headers = lines[0].split(',').map(h => h.trim());
+            const variables = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',').map(v => v.trim());
+                const variable = {};
+                headers.forEach((header, index) => {
+                    variable[header] = values[index] || '';
+                });
+                variables.push(variable);
+            }
+
+            return variables;
+        }
+
+        function clearCSVTemplate() {
+            csvTemplateData = null;
+            document.getElementById('csvTemplateInput').value = '';
+            document.getElementById('csvTemplateStatus').style.display = 'none';
+            console.log('CSV template cleared');
+        }
+
+        // LLM Provider Functions
+        async function updateModelOptions() {
+            const provider = document.getElementById('llmProvider').value;
+            const modelSelect = document.getElementById('modelSelect');
+
+            modelSelect.innerHTML = '<option value="">Loading...</option>';
+
+            if (provider === 'ollama') {
+                // Load Ollama models from API
+                try {
+                    const response = await fetch(`${MINERU_SERVICE_URL}/models`);
+                    const data = await response.json();
+
+                    if (data.success && data.models && data.models.length > 0) {
+                        LLM_MODELS.ollama = data.models.map(m => ({ value: m, label: m }));
+
+                        modelSelect.innerHTML = LLM_MODELS.ollama
+                            .map(m => `<option value="${m.value}">${m.label}</option>`)
+                            .join('');
+
+                        // Select default model
+                        modelSelect.value = LLM_MODELS.ollama[0].value;
+                    } else {
+                        modelSelect.innerHTML = '<option value="">No models available</option>';
+                        console.warn('No Ollama models found');
+                    }
+                } catch (error) {
+                    modelSelect.innerHTML = '<option value="">Error loading models</option>';
+                    console.error('Error loading Ollama models:', error);
+                }
+            } else {
+                // Use predefined cloud models
+                const models = LLM_MODELS[provider];
+                modelSelect.innerHTML = models
+                    .map(m => `<option value="${m.value}">${m.label}</option>`)
+                    .join('');
+
+                if (models.length > 0) {
+                    modelSelect.value = models[0].value;
+                }
+            }
+        }
 
         // Upload section handling
         const uploadSection = document.getElementById('uploadSection');
@@ -435,12 +758,17 @@
             showStatus(`Selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`, 'info');
             processBtn.style.display = 'inline-block';
             processBtn.onclick = () => processDocument(file);
+
+            // Show image extraction button
+            const extractImagesBtn = document.getElementById('extractImagesBtn');
+            extractImagesBtn.style.display = 'inline-block';
+            extractImagesBtn.onclick = () => extractImagesOnly(file);
         }
 
         async function processDocument(file) {
             showStatus('Processing document...', 'info');
             processBtn.disabled = true;
-            document.getElementById('results').style.display = 'none';
+            document.getElementById('tabsContainer').style.display = 'none';
 
             // Show loading
             const loadingDiv = document.createElement('div');
@@ -479,11 +807,58 @@
             }
         }
 
+        async function extractImagesOnly(file) {
+            showStatus('Extracting images (fast mode)...', 'info');
+            const extractImagesBtn = document.getElementById('extractImagesBtn');
+            extractImagesBtn.disabled = true;
+            processBtn.disabled = true;
+            document.getElementById('tabsContainer').style.display = 'none';
+
+            // Show loading
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'loading';
+            loadingDiv.innerHTML = '<div class="spinner"></div><p>Extracting images with PyMuPDF...</p>';
+            document.querySelector('.content').appendChild(loadingDiv);
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch(`${MINERU_SERVICE_URL}/extract-images-only`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                loadingDiv.remove();
+
+                if (!response.ok) {
+                    throw new Error(`Image extraction failed: ${response.statusText}`);
+                }
+
+                currentResult = await response.json();
+                console.log('Image extraction complete:', currentResult);
+                console.log('Images count:', currentResult.images?.length || 0);
+                displayResults();
+                showStatus(`✅ Extracted ${currentResult.images?.length || 0} images in ${currentResult.metadata?.processing_time || 0}s!`, 'success');
+
+            } catch (error) {
+                loadingDiv.remove();
+                showStatus(`Error: ${error.message}`, 'error');
+                console.error('Image extraction error:', error);
+            } finally {
+                extractImagesBtn.disabled = false;
+                processBtn.disabled = false;
+            }
+        }
+
         function displayResults() {
-            document.getElementById('extractionControls').style.display = 'block';
+            const extractionControls = document.getElementById('extractionControls');
+            if (extractionControls) {
+                extractionControls.style.display = 'block';
+            }
 
             console.log('displayResults called');
-            const resultsDiv = document.getElementById('results');
+            const resultsDiv = document.getElementById('tabsContainer');
             resultsDiv.style.display = 'block';
 
             // Backend returns 'text' not 'markdown', and 'metadata.pages' not 'num_pages'
@@ -652,43 +1027,6 @@
             }
         }
 
-
-        // Model loading and extraction functions
-        async function loadModels() {
-            try {
-                const response = await fetch(`${MINERU_SERVICE_URL}/models`);
-                const data = await response.json();
-
-                if (data.success && data.models) {
-                    availableModels = data.models;
-                    const modelSelect = document.getElementById('modelSelect');
-
-                    // Clear loading option
-                    modelSelect.innerHTML = '';
-
-                    // Add models
-                    data.models.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = model;
-                        option.textContent = model;
-
-                        // Pre-select qwen2.5-coder:7b if available
-                        if (model === 'qwen2.5-coder:7b') {
-                            option.selected = true;
-                        }
-
-                        modelSelect.appendChild(option);
-                    });
-
-                    console.log('Loaded models:', data.models);
-                }
-            } catch (error) {
-                console.error('Failed to load models:', error);
-                const modelSelect = document.getElementById('modelSelect');
-                modelSelect.innerHTML = '<option value="">Error loading models</option>';
-            }
-        }
-
         async function extractStructuredData() {
             if (!currentResult || !currentResult.text) {
                 showStatus('⚠️ No processed text available for extraction', 'error');
@@ -742,7 +1080,10 @@
 
                     // Switch to extracted tab
                     setTimeout(() => {
-                        document.querySelector('[data-tab="extracted"]').click();
+                        const resultsTab = document.querySelector('[data-tab="results"]');
+                        if (resultsTab) {
+                            resultsTab.click();
+                        }
                     }, 1000);
 
                 } else {
@@ -760,114 +1101,15 @@
             }
         }
 
-        function displayExtractedVariables(data, model) {
-            const container = document.getElementById('extractedContent');
 
-            let html = `
-                <div style="background: linear-gradient(135deg, #1a1a2e, #16213e); border-radius: 10px; padding: 20px; margin: 20px 0;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h3 style="color: #00ffcc; margin: 0;">📊 Extracted Research Variables</h3>
-                        <span style="background: rgba(0, 255, 204, 0.2); color: #00ffcc; padding: 5px 15px; border-radius: 20px; font-size: 12px; font-weight: bold;">
-                            ${model}
-                        </span>
-                    </div>
+        // Page initialization
+        window.addEventListener('load', async () => {
+            await loadProviders();  // Load available LLM providers from /providers endpoint
+            await loadModels();     // Load Ollama models
+            toggleVariableSource(); // Initialize with predefined variables
+        });
 
-                    <table style="width: 100%; border-collapse: collapse; background: rgba(255, 255, 255, 0.05); border-radius: 8px; overflow: hidden;">
-                        <thead>
-                            <tr style="background: rgba(0, 255, 204, 0.1);">
-                                <th style="padding: 12px; text-align: left; color: #00ffcc; font-weight: bold; width: 30%;">Variable</th>
-                                <th style="padding: 12px; text-align: left; color: #00ffcc; font-weight: bold;">Value</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            `;
 
-            const fields = [
-                {key: 'dataset', label: 'Dataset(s)'},
-                {key: 'tissue_type', label: 'Tissue Type(s)'},
-                {key: 'input_format', label: 'Input Format'},
-                {key: 'method', label: 'Method'},
-                {key: 'family', label: 'Family'},
-                {key: 'architecture', label: 'Architecture'},
-                {key: 'innovation', label: 'Innovation'},
-                {key: 'type', label: 'Type'},
-                {key: 'metrics', label: 'Metric(s)'},
-                {key: 'metric_used', label: 'Metric Used?'},
-                {key: 'performance', label: 'Performance'},
-                {key: 'limitations', label: 'Limitations'},
-                {key: 'future_work', label: 'Future Work'},
-                {key: 'notes', label: 'Notes'}
-            ];
-
-            fields.forEach((field, index) => {
-                const value = data[field.key] || 'N/A';
-                const bgColor = index % 2 === 0 ? 'rgba(255, 255, 255, 0.03)' : 'transparent';
-
-                html += `
-                    <tr style="background: ${bgColor}; border-bottom: 1px solid rgba(255, 255, 255, 0.05);">
-                        <td style="padding: 12px; color: #00d9ff; font-weight: 500;">${field.label}</td>
-                        <td style="padding: 12px; color: #fff; line-height: 1.6;">${escapeHtml(String(value))}</td>
-                    </tr>
-                `;
-            });
-
-            html += `
-                        </tbody>
-                    </table>
-
-                    <div style="margin-top: 20px; text-align: center;">
-                        <button onclick="downloadExtractedJSON()" style="padding: 10px 25px; background: linear-gradient(135deg, #00d9ff, #00ffcc); color: #1a1a2e; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; margin-right: 10px;">
-                            Download JSON
-                        </button>
-                        <button onclick="downloadExtractedCSV()" style="padding: 10px 25px; background: linear-gradient(135deg, #00d9ff, #00ffcc); color: #1a1a2e; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">
-                            Download CSV
-                        </button>
-                    </div>
-                </div>
-            `;
-
-            container.innerHTML = html;
-        }
-
-        function downloadExtractedJSON() {
-            if (!extractedVariables) return;
-
-            const json = JSON.stringify(extractedVariables, null, 2);
-            downloadFile(json, 'extracted_variables.json', 'application/json');
-        }
-
-        function downloadExtractedCSV() {
-            if (!extractedVariables) return;
-
-            const fields = [
-                'dataset', 'tissue_type', 'input_format', 'method', 'family',
-                'architecture', 'innovation', 'type', 'metrics', 'metric_used',
-                'performance', 'limitations', 'future_work', 'notes'
-            ];
-
-            const headers = [
-                'Dataset', 'Tissue Type', 'Input Format', 'Method', 'Family',
-                'Architecture', 'Innovation', 'Type', 'Metrics', 'Metric Used',
-                'Performance', 'Limitations', 'Future Work', 'Notes'
-            ];
-
-            let csv = headers.join(',') + '\n';
-
-            const values = fields.map(field => {
-                const value = extractedVariables[field] || 'N/A';
-                // Escape quotes and wrap in quotes
-                return `"${String(value).replace(/"/g, '""')}"`;
-            });
-
-            csv += values.join(',');
-
-            downloadFile(csv, 'extracted_variables.csv', 'text/csv');
-        }
-
-        // Load models on page load
-        window.addEventListener('load', loadModels);
-
-        
         // Tab handling
         document.querySelectorAll('.tab').forEach(tab => {
             tab.addEventListener('click', () => {
@@ -931,30 +1173,8 @@
 
         // Model loading and extraction functions
         async function loadModels() {
-            try {
-                const response = await fetch(`${MINERU_SERVICE_URL}/models`);
-                const data = await response.json();
-
-                if (data.success && data.models) {
-                    availableModels = data.models;
-                    const modelSelect = document.getElementById('modelSelect');
-                    modelSelect.innerHTML = '';
-
-                    data.models.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = model;
-                        option.textContent = model;
-                        if (model === 'qwen2.5-coder:7b' || model === 'qwen3:8b') {
-                            option.selected = true;
-                        }
-                        modelSelect.appendChild(option);
-                    });
-
-                    console.log('Loaded models:', data.models);
-                }
-            } catch (error) {
-                console.error('Failed to load models:', error);
-            }
+            // Initialize with default provider (Ollama)
+            await updateModelOptions();
         }
 
         async function extractStructuredData() {
@@ -964,7 +1184,9 @@
             }
 
             const modelSelect = document.getElementById('modelSelect');
+            const providerSelect = document.getElementById('llmProvider');
             const selectedModel = modelSelect.value;
+            const selectedProvider = providerSelect.value;
 
             if (!selectedModel) {
                 showStatus('⚠️ Please select a model', 'error');
@@ -978,15 +1200,32 @@
                 extractButton.disabled = true;
                 extractButton.textContent = 'Extracting...';
                 statusDiv.style.display = 'block';
-                statusDiv.innerHTML = `<strong>🤖 Analyzing with ${selectedModel}...</strong><br/>This may take 30-60 seconds.`;
+
+                const providerLabel = selectedProvider === 'ollama' ? 'Local Ollama' :
+                                     selectedProvider === 'openai' ? 'OpenAI' : 'Claude';
+
+                const templateInfo = csvTemplateData ?
+                    `<br/>📊 Using ${csvTemplateData.length} custom variables from CSV template` : '';
+
+                statusDiv.innerHTML = `<strong>🤖 Analyzing with ${selectedModel} (${providerLabel})...</strong>${templateInfo}<br/>⏱️ Complex documents may take 3-5 minutes. Please wait...`;
+
+                // Prepare request payload
+                const payload = {
+                    text: currentResult.text,
+                    model: selectedModel,
+                    provider: selectedProvider,
+                    timeout: 300  // 5 minutes for complex documents
+                };
+
+                // Include CSV template if available
+                if (csvTemplateData) {
+                    payload.variables_template = csvTemplateData;
+                }
 
                 const response = await fetch(`${MINERU_SERVICE_URL}/extract-structured`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        text: currentResult.text,
-                        model: selectedModel
-                    })
+                    body: JSON.stringify(payload)
                 });
 
                 const result = await response.json();
@@ -994,12 +1233,15 @@
                 if (result.success && result.data) {
                     extractedVariables = result.data;
                     statusDiv.style.background = 'rgba(0, 255, 204, 0.1)';
-                    statusDiv.innerHTML = `<strong>✅ Complete!</strong> Processed in ${result.processing_time}s`;
+                    statusDiv.innerHTML = `<strong>✅ Complete!</strong> Processed in ${result.processing_time}s using ${providerLabel}`;
 
-                    displayExtractedVariables(extractedVariables, result.model);
+                    displayExtractedVariables(extractedVariables, result.model, selectedProvider);
 
                     setTimeout(() => {
-                        document.querySelector('[data-tab="extracted"]').click();
+                        const resultsTab = document.querySelector('[data-tab="results"]');
+                        if (resultsTab) {
+                            resultsTab.click();
+                        }
                     }, 1000);
                 } else {
                     throw new Error(result.error || 'Extraction failed');
@@ -1017,18 +1259,30 @@
         function displayExtractedVariables(data, model) {
             const container = document.getElementById('extractedContent');
 
-            const fields = [
-                ['dataset', 'Dataset(s)'], ['tissue_type', 'Tissue Type(s)'], ['input_format', 'Input Format'],
-                ['method', 'Method'], ['family', 'Family'], ['architecture', 'Architecture'],
-                ['innovation', 'Innovation'], ['type', 'Type'], ['metrics', 'Metric(s)'],
-                ['metric_used', 'Metric Used?'], ['performance', 'Performance'],
-                ['limitations', 'Limitations'], ['future_work', 'Future Work'], ['notes', 'Notes']
-            ];
+            // Dynamically get all fields from the extraction result
+            const fields = Object.keys(data || {}).map(key => {
+                // Convert snake_case to Title Case for display
+                const label = key.split('_').map(word =>
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                ).join(' ');
+                return [key, label];
+            });
+
+            // If no fields, show empty state
+            if (fields.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; color: #aaa; padding: 40px;">
+                        <p style="font-size: 18px;">📋 No extracted data</p>
+                        <p style="font-size: 14px;">The extraction returned no variables</p>
+                    </div>
+                `;
+                return;
+            }
 
             let html = `
                 <div style="background: linear-gradient(135deg, #1a1a2e, #16213e); border-radius: 10px; padding: 20px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
-                        <h3 style="color: #00ffcc;">📊 Extracted Research Variables</h3>
+                        <h3 style="color: #00ffcc;">📊 Extracted Variables</h3>
                         <span style="background: rgba(0, 255, 204, 0.2); color: #00ffcc; padding: 5px 15px; border-radius: 20px; font-size: 12px;">${model}</span>
                     </div>
                     <table style="width: 100%; border-collapse: collapse; background: rgba(255, 255, 255, 0.05);">
@@ -1043,10 +1297,11 @@
             fields.forEach(([key, label], idx) => {
                 const value = data[key] || 'N/A';
                 const bg = idx % 2 === 0 ? 'rgba(255, 255, 255, 0.03)' : 'transparent';
+                const displayValue = value === null ? 'N/A' : String(value);
                 html += `
                     <tr style="background: ${bg};">
-                        <td style="padding: 12px; color: #00d9ff; font-weight: 500;">${label}</td>
-                        <td style="padding: 12px; color: #fff;">${escapeHtml(String(value))}</td>
+                        <td style="padding: 12px; color: #00d9ff; font-weight: 500;">${escapeHtml(label)}</td>
+                        <td style="padding: 12px; color: #fff;">${escapeHtml(displayValue)}</td>
                     </tr>`;
             });
 
@@ -1069,8 +1324,16 @@
 
         function downloadExtractedCSV() {
             if (!extractedVariables) return;
-            const fields = ['dataset', 'tissue_type', 'input_format', 'method', 'family', 'architecture', 'innovation', 'type', 'metrics', 'metric_used', 'performance', 'limitations', 'future_work', 'notes'];
-            const headers = ['Dataset', 'Tissue Type', 'Input Format', 'Method', 'Family', 'Architecture', 'Innovation', 'Type', 'Metrics', 'Metric Used', 'Performance', 'Limitations', 'Future Work', 'Notes'];
+
+            // Get all fields dynamically from the extraction result
+            const fields = Object.keys(extractedVariables);
+
+            // Create headers from field names (convert snake_case to Title Case)
+            const headers = fields.map(key =>
+                key.split('_').map(word =>
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                ).join(' ')
+            );
 
             let csv = headers.join(',') + '\n';
             const values = fields.map(f => `"${String(extractedVariables[f] || 'N/A').replace(/"/g, '""')}"`);
@@ -1078,9 +1341,6 @@
 
             downloadFile(csv, 'extracted_variables.csv', 'text/csv');
         }
-
-        // Load models on page load
-        window.addEventListener('load', loadModels);
     </script>
 </body>
 </html>

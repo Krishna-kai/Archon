@@ -19,7 +19,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -27,8 +27,13 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from pydantic import BaseModel
 from PIL import Image
+from openai import OpenAI
+import httpx
+from anthropic import Anthropic
+import fitz  # PyMuPDF
 
 from mineru.backend.pipeline.pipeline_analyze import doc_analyze
+from template_loader import template_loader, ExtractionTemplate
 
 
 # ==================== Configuration ====================
@@ -36,6 +41,17 @@ from mineru.backend.pipeline.pipeline_analyze import doc_analyze
 PORT = int(os.getenv("PORT", "9006"))
 HOST = os.getenv("HOST", "0.0.0.0")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").lower()
+
+# LLM Provider Configuration (ENV-based)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+
+# Determine available providers based on ENV
+AVAILABLE_PROVIDERS = ["ollama"]  # Always available (local)
+if OPENAI_API_KEY:
+    AVAILABLE_PROVIDERS.append("openai")
+if ANTHROPIC_API_KEY:
+    AVAILABLE_PROVIDERS.append("claude")
 
 # Service metadata
 SERVICE_VERSION = "2.0.0"
@@ -160,6 +176,13 @@ async def health_check():
         platform=get_platform_info(),
         timestamp=datetime.now().isoformat()
     )
+
+
+@app.get("/favicon.ico")
+async def favicon():
+    """Return empty response for favicon to prevent 404 errors"""
+    from fastapi.responses import Response
+    return Response(status_code=204)
 
 
 @app.get("/ui")
@@ -479,85 +502,342 @@ class ExtractRequest(BaseModel):
     """Request model for structured extraction"""
     text: str
     model: str = "qwen2.5-coder:7b"
+    provider: str = "ollama"  # ollama, openai, claude
+    template_id: Optional[str] = None  # Template ID (medical_research, legal_document, technical_document, general_document)
+    variables_template: Optional[List[Dict[str, Any]]] = None  # CSV template data (DEPRECATED - use template_id instead)
+    temperature: Optional[float] = None  # Override template temperature
+    max_tokens: Optional[int] = None  # Override template max_tokens
+    max_text_length: Optional[int] = None  # Override template max_text_length
+    timeout: Optional[int] = None  # Override template timeout
 
 class ExtractResponse(BaseModel):
     """Response model for structured extraction"""
     success: bool
     data: Optional[Dict[str, Any]] = None
     model: str
+    provider: str
     error: Optional[str] = None
     processing_time: float
+
+
+@app.get("/providers")
+async def list_providers():
+    """
+    List available LLM providers based on ENV configuration.
+    Local Ollama is always available. Cloud providers require API keys in ENV.
+    """
+    return {
+        "providers": AVAILABLE_PROVIDERS,
+        "default": "ollama",
+        "details": {
+            "ollama": {"available": True, "description": "Local LLM via Ollama"},
+            "openai": {"available": "openai" in AVAILABLE_PROVIDERS, "description": "OpenAI GPT models"},
+            "claude": {"available": "claude" in AVAILABLE_PROVIDERS, "description": "Anthropic Claude models"}
+        }
+    }
+
+
+@app.get("/templates")
+async def list_templates():
+    """List available extraction templates"""
+    templates = template_loader.list_templates()
+    return {
+        "templates": templates,
+        "count": len(templates),
+        "message": "Use template_id in extraction requests to select a template"
+    }
+
+
+@app.get("/templates/{template_id}")
+async def get_template_detail(template_id: str):
+    """Get detailed information about a specific template"""
+    template = template_loader.get_template(template_id)
+
+    if not template:
+        raise HTTPException(status_code=404, detail=f"Template not found: {template_id}")
+
+    return {
+        "id": template.id,
+        "name": template.name,
+        "description": template.description,
+        "category": template.category,
+        "variables": [
+            {
+                "name": var.name,
+                "description": var.description,
+                "type": var.type,
+                "required": var.required
+            }
+            for var in template.variables
+        ],
+        "parameters": {
+            "max_text_length": template.parameters.max_text_length,
+            "temperature": template.parameters.temperature,
+            "max_tokens": template.parameters.max_tokens,
+            "timeout": template.parameters.timeout
+        },
+        "output_format": {
+            "null_handling": template.output_format.null_handling,
+            "strict_schema": template.output_format.strict_schema
+        }
+    }
+
+
+def get_template_and_params(
+    template_id: Optional[str],
+    variables_template: Optional[List[Dict]],
+    temperature_override: Optional[float],
+    max_tokens_override: Optional[int],
+    max_text_length_override: Optional[int],
+    timeout_override: Optional[int]
+) -> tuple[ExtractionTemplate, Dict[str, Any]]:
+    """
+    Get extraction template and parameters with overrides.
+
+    Returns:
+        tuple: (template, params_dict)
+    """
+    if variables_template:
+        log_message("warning", "variables_template is DEPRECATED - please use template_id instead")
+        template = template_loader.get_default_template()
+    elif template_id:
+        template = template_loader.get_template(template_id)
+        if not template:
+            raise ValueError(f"Template not found: {template_id}")
+    else:
+        template = template_loader.get_default_template()
+
+    params = {
+        "temperature": temperature_override or template.parameters.temperature,
+        "max_tokens": max_tokens_override or template.parameters.max_tokens,
+        "max_text_length": max_text_length_override or template.parameters.max_text_length,
+        "timeout": timeout_override or template.parameters.timeout
+    }
+
+    return template, params
+
+
+async def extract_with_openai(
+    text: str,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float,
+    max_tokens: int
+) -> Dict:
+    """Extract using OpenAI API with template parameters"""
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured. Set OPENAI_API_KEY environment variable to enable OpenAI provider.")
+
+    client = OpenAI(api_key=OPENAI_API_KEY)
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        temperature=temperature,
+        max_tokens=max_tokens
+    )
+
+    response_text = response.choices[0].message.content
+
+    # Clean and parse JSON
+    response_text = re.sub(r'```json\s*', '', response_text)
+    response_text = re.sub(r'```\s*', '', response_text)
+    start = response_text.find('{')
+    end = response_text.rfind('}')
+    if start != -1 and end != -1:
+        response_text = response_text[start:end+1]
+
+    return json.loads(response_text)
+
+
+async def extract_with_claude(
+    text: str,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float,
+    max_tokens: int
+) -> Dict:
+    """Extract using Anthropic Claude API with template parameters"""
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured. Set ANTHROPIC_API_KEY environment variable to enable Claude provider.")
+
+    client = Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    message = client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        system=system_prompt,
+        messages=[
+            {"role": "user", "content": user_prompt}
+        ]
+    )
+
+    response_text = message.content[0].text
+
+    # Clean and parse JSON
+    response_text = re.sub(r'```json\s*', '', response_text)
+    response_text = re.sub(r'```\s*', '', response_text)
+    start = response_text.find('{')
+    end = response_text.rfind('}')
+    if start != -1 and end != -1:
+        response_text = response_text[start:end+1]
+
+    return json.loads(response_text)
+
+
+async def extract_with_ollama(
+    text: str,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float,
+    max_tokens: int,
+    timeout: int
+) -> Dict:
+    """Extract using local Ollama HTTP API with JSON mode for structured output"""
+    ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+
+    # Combine system and user prompts
+    full_prompt = f"{system_prompt}\n\n{user_prompt}"
+
+    # Add instruction to output JSON only (helps with non-JSON-mode models)
+    full_prompt += "\n\nIMPORTANT: Respond with ONLY valid JSON. No explanations, no thinking, no markdown formatting."
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                f"{ollama_url}/api/generate",
+                json={
+                    "model": model,
+                    "prompt": full_prompt,
+                    "format": "json",  # Force JSON output
+                    "stream": False,   # Get complete response at once
+                    "options": {
+                        "temperature": temperature,
+                        "num_predict": max_tokens,
+                    }
+                }
+            )
+
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Ollama API error: {response.status_code} - {response.text}"
+                )
+
+            result = response.json()
+            response_text = result.get("response", "")
+
+            if not response_text:
+                raise HTTPException(status_code=500, detail="Ollama returned empty response")
+
+            # Parse JSON response
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError as e:
+                log_message("error", f"Failed to parse Ollama JSON response: {e}")
+                log_message("error", f"Response text: {response_text[:500]}...")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Ollama returned invalid JSON: {str(e)}"
+                )
+
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ollama request timed out after {timeout} seconds"
+        )
+    except httpx.RequestError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ollama connection error: {str(e)}. Is Ollama running?"
+        )
+
 
 @app.post("/extract-structured", response_model=ExtractResponse)
 async def extract_structured(request: ExtractRequest):
     """
-    Extract structured variables from processed PDF text using local LLMs via Ollama.
+    Extract structured variables from processed PDF text using selected LLM provider.
+    Supports Ollama (local), OpenAI, and Claude APIs with optional CSV templates.
     """
     start_time = time.time()
 
     try:
-        log_message("info", f"Starting structured extraction with model: {request.model}")
+        log_message("info", f"Starting extraction with {request.provider}/{request.model}")
 
-        # Extraction prompt
-        prompt = f"""You are a research paper analysis assistant. Extract information from this medical image segmentation research paper.
+        # Validate provider is available
+        if request.provider not in AVAILABLE_PROVIDERS:
+            return ExtractResponse(
+                success=False,
+                model=request.model,
+                provider=request.provider,
+                error=f"Provider '{request.provider}' not available. Check ENV configuration.",
+                processing_time=0
+            )
 
-Extract these variables as valid JSON:
-- dataset: Dataset names used
-- tissue_type: Tissue types analyzed
-- input_format: Input data format
-- method: Primary method name
-- family: Architecture family
-- architecture: Specific architecture
-- innovation: Key contribution
-- type: Approach type
-- metrics: Evaluation metrics
-- metric_used: Primary metric
-- performance: Key results
-- limitations: Limitations mentioned
-- future_work: Future directions
-- notes: Additional notes
-
-Paper excerpt:
----
-{request.text[:10000]}
----
-
-Respond with ONLY a JSON object. No explanations, no markdown."""
-
-        # Call Ollama
-        result = subprocess.run(
-            ["ollama", "run", request.model, prompt],
-            capture_output=True,
-            text=True,
-            timeout=120
+        # Get template and parameters with overrides
+        template, params = get_template_and_params(
+            request.template_id,
+            request.variables_template,
+            request.temperature,
+            request.max_tokens,
+            request.max_text_length,
+            request.timeout
         )
 
-        if result.returncode != 0:
-            raise HTTPException(status_code=500, detail=f"Ollama failed: {result.stderr}")
+        # Build prompts from template
+        system_prompt, user_prompt = template_loader.build_prompt(
+            template,
+            request.text,
+            params["max_text_length"]
+        )
 
-        response_text = result.stdout.strip()
+        log_message("info", f"Using template: {template.id} ({template.name})")
 
-        # Clean JSON from response
-        response_text = re.sub(r'```json\s*', '', response_text)
-        response_text = re.sub(r'```\s*', '', response_text)
-
-        start = response_text.find('{')
-        end = response_text.rfind('}')
-
-        if start != -1 and end != -1:
-            response_text = response_text[start:end+1]
-
-        # Parse JSON
-        extracted_data = json.loads(response_text)
+        # Route to appropriate provider with template parameters
+        if request.provider == "openai":
+            extracted_data = await extract_with_openai(
+                request.text,
+                request.model,
+                system_prompt,
+                user_prompt,
+                params["temperature"],
+                params["max_tokens"]
+            )
+        elif request.provider == "claude":
+            extracted_data = await extract_with_claude(
+                request.text,
+                request.model,
+                system_prompt,
+                user_prompt,
+                params["temperature"],
+                params["max_tokens"]
+            )
+        else:  # ollama (default)
+            extracted_data = await extract_with_ollama(
+                request.text,
+                request.model,
+                system_prompt,
+                user_prompt,
+                params["temperature"],
+                params["max_tokens"],
+                params["timeout"]
+            )
 
         processing_time = time.time() - start_time
-
-        log_message("success", f"Structured extraction complete in {processing_time:.2f}s")
+        log_message("success", f"Extraction complete in {processing_time:.2f}s")
 
         return ExtractResponse(
             success=True,
             data=extracted_data,
             model=request.model,
+            provider=request.provider,
             processing_time=round(processing_time, 2)
         )
 
@@ -567,17 +847,19 @@ Respond with ONLY a JSON object. No explanations, no markdown."""
         return ExtractResponse(
             success=False,
             model=request.model,
+            provider=request.provider,
             error=f"Failed to parse LLM response: {str(e)}",
             processing_time=round(processing_time, 2)
         )
 
     except subprocess.TimeoutExpired:
         processing_time = time.time() - start_time
-        log_message("error", "Ollama request timed out")
+        log_message("error", f"Request timed out after {params['timeout']} seconds")
         return ExtractResponse(
             success=False,
             model=request.model,
-            error="Request timed out after 120 seconds",
+            provider=request.provider,
+            error=f"Request timed out after {params['timeout']} seconds",
             processing_time=round(processing_time, 2)
         )
 
@@ -587,9 +869,124 @@ Respond with ONLY a JSON object. No explanations, no markdown."""
         return ExtractResponse(
             success=False,
             model=request.model,
+            provider=request.provider,
             error=str(e),
             processing_time=round(processing_time, 2)
         )
+
+@app.post("/extract-images-only")
+async def extract_images_only(file: UploadFile = File(...)):
+    """
+    Extract all images from PDF using PyMuPDF (bypasses MinerU layout detection).
+    This is faster and more reliable for image-only extraction, ideal for zooming.
+
+    Args:
+        file: PDF file to process
+
+    Returns:
+        All embedded images from the PDF with base64 encoding
+    """
+    start_time = time.time()
+
+    try:
+        log_message("info", f"Extracting images from: {file.filename}")
+
+        # Validate file
+        if not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file format. Only PDF files are supported."
+            )
+
+        # Read PDF content
+        pdf_bytes = await file.read()
+        file_size_mb = len(pdf_bytes) / (1024 * 1024)
+        log_message("info", f"PDF size: {file_size_mb:.2f} MB")
+
+        # Open PDF with PyMuPDF
+        pdf_doc = fitz.open("pdf", pdf_bytes)
+        page_count = len(pdf_doc)
+        log_message("info", f"Processing {page_count} pages for images...")
+
+        image_data_list = []
+        total_images = 0
+
+        # Extract images from each page
+        for page_num in range(page_count):
+            page = pdf_doc[page_num]
+            image_list = page.get_images(full=True)
+
+            log_message("info", f"Page {page_num + 1}: Found {len(image_list)} images")
+
+            for img_index, img_info in enumerate(image_list):
+                try:
+                    xref = img_info[0]
+                    base_image = pdf_doc.extract_image(xref)
+
+                    # Get image bytes and convert to base64
+                    image_bytes = base_image["image"]
+                    img_base64 = base64.b64encode(image_bytes).decode('utf-8')
+
+                    # Determine image format
+                    img_ext = base_image.get("ext", "png")
+                    mime_type = f"image/{img_ext}"
+
+                    # Get image dimensions
+                    width = base_image.get("width", 0)
+                    height = base_image.get("height", 0)
+
+                    image_data_list.append(ImageData(
+                        name=f"page_{page_num + 1}_img_{img_index + 1}.{img_ext}",
+                        base64=img_base64,
+                        page_number=page_num + 1,
+                        image_index=img_index,
+                        mime_type=mime_type
+                    ))
+
+                    total_images += 1
+                    log_message("info",
+                        f"  ✓ Extracted: page_{page_num + 1}_img_{img_index + 1}.{img_ext} "
+                        f"({width}x{height})")
+
+                except Exception as img_err:
+                    log_message("warning",
+                        f"Failed to extract image {img_index + 1} from page {page_num + 1}: {img_err}")
+
+        pdf_doc.close()
+        processing_time = time.time() - start_time
+
+        log_message("success",
+            f"Extracted {total_images} images in {processing_time:.2f}s")
+
+        return ProcessResponse(
+            success=True,
+            text="",  # No text extraction in this endpoint
+            images=image_data_list,
+            metadata={
+                "filename": file.filename,
+                "file_size_mb": round(file_size_mb, 2),
+                "pages": page_count,
+                "images_extracted": total_images,
+                "chars_extracted": 0,
+                "formulas_detected": 0,
+                "tables_detected": 0,
+                "backend": "PyMuPDF (direct image extraction)",
+                "processing_time": round(processing_time, 2)
+            },
+            message=f"Extracted {total_images} images from {page_count} pages",
+            processing_time=round(processing_time, 2)
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        processing_time = time.time() - start_time
+        log_message("error", f"Image extraction failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Image extraction failed: {str(e)}"
+        )
+
 
 @app.get("/models")
 async def list_models():
@@ -597,8 +994,10 @@ async def list_models():
     List available Ollama models for structured extraction.
     """
     try:
+        # Use full path to ollama binary
+        ollama_path = os.getenv("OLLAMA_PATH", "/opt/homebrew/bin/ollama")
         result = subprocess.run(
-            ["ollama", "list"],
+            [ollama_path, "list"],
             capture_output=True,
             text=True,
             timeout=10
@@ -615,7 +1014,9 @@ async def list_models():
             parts = line.split()
             if parts:
                 model_name = parts[0]
-                models.append(model_name)
+                # Filter out embedding models (nomic) - they don't support text generation
+                if 'nomic' not in model_name.lower():
+                    models.append(model_name)
 
         return {
             "success": True,
