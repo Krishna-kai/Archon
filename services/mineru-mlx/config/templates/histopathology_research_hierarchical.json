@@ -1,0 +1,187 @@
+{
+  "id": "histopathology_research_hierarchical",
+  "name": "Histopathology Research Paper (Hierarchical)",
+  "description": "Hierarchical template for histopathology research papers with grouped fields (21 variables in 6 logical groups)",
+  "category": "medical_research",
+  "system_prompt": "You are an expert in medical research paper analysis, specializing in histopathology and medical imaging. Extract structured data with precision, organizing information into logical hierarchical groups.",
+  "user_prompt_template": "Extract information from this histopathology research paper as valid JSON with hierarchical structure.\n\nIMPORTANT RULES:\n1. Use null for any information you cannot find\n2. Be precise - only extract what is explicitly stated\n3. Do not make assumptions or infer information\n4. Organize data into the specified hierarchical groups\n5. Return ONLY valid JSON, no explanations, no markdown\n\nExtract these variables organized in groups:\n{variables_list}\n\nDocument excerpt:\n---\n{text}\n---\n\nRespond with ONLY a JSON object following this exact hierarchical schema:\n{json_schema}",
+  "variables": [
+    {
+      "name": "publication",
+      "description": "Publication metadata group",
+      "type": "object",
+      "required": false,
+      "properties": [
+        {
+          "name": "paper_id",
+          "description": "Unique identifier for the paper (if mentioned)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "title",
+          "description": "Full title of the research paper",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "authors",
+          "description": "List of authors (comma-separated)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "year",
+          "description": "Publication year",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "venue",
+          "description": "Publication venue (conference, journal name)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "doi",
+          "description": "Digital Object Identifier",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "methodology",
+      "description": "Dataset and methodology details",
+      "type": "object",
+      "required": false,
+      "properties": [
+        {
+          "name": "dataset",
+          "description": "Names of datasets used (comma-separated)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "tissue_type",
+          "description": "Type of tissue analyzed (e.g., skin, lung, breast)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "stain_normalization",
+          "description": "Staining normalization method used (e.g., H&E, Reinhard, Macenko)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "supervision_type",
+          "description": "Type of supervision (supervised, semi-supervised, unsupervised, weakly-supervised)",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "architecture",
+      "description": "Model architecture details",
+      "type": "object",
+      "required": false,
+      "properties": [
+        {
+          "name": "architecture_family",
+          "description": "Architecture family (CNN, Transformer, Hybrid, etc.)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "core_architecture",
+          "description": "Specific architecture used (ResNet, U-Net, Vision Transformer, etc.)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "key_innovation",
+          "description": "Key architectural innovation or modification",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "evaluation",
+      "description": "Evaluation metrics and performance",
+      "type": "object",
+      "required": false,
+      "properties": [
+        {
+          "name": "primary_metrics",
+          "description": "Primary evaluation metrics used (accuracy, F1, AUC, etc.)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "object_level_metric",
+          "description": "Object-level metrics (Dice, IoU, pixel accuracy, etc.)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "performance",
+          "description": "Key performance results with numbers",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "cross_dataset_tested",
+          "description": "Whether cross-dataset validation was performed (Yes/No)",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "discussion",
+      "description": "Limitations, future work, and clinical application",
+      "type": "object",
+      "required": false,
+      "properties": [
+        {
+          "name": "limitations",
+          "description": "Limitations mentioned by authors",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "future_work",
+          "description": "Future research directions proposed",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "clinical_application",
+          "description": "Clinical application or impact mentioned",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "notes",
+      "description": "Additional notes or observations",
+      "type": "string",
+      "required": false
+    }
+  ],
+  "parameters": {
+    "max_text_length": 20000,
+    "temperature": 0.1,
+    "max_tokens": 3000,
+    "timeout": 180
+  },
+  "output_format": {
+    "null_handling": "Use null for missing data (not 'N/A' or empty string)",
+    "strict_schema": true,
+    "include_confidence": false
+  }
+}
