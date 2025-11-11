@@ -54,14 +54,29 @@ class HybridSearchStrategy:
                 filter_json = filter_metadata or {}
                 source_filter = filter_json.pop("source", None) if "source" in filter_json else None
 
-                # Call the hybrid search PostgreSQL function
+                # Build JSONB filter with organization tag conversion
+                jsonb_filter = {}
+                if "organization_tag" in filter_json:
+                    # Use JSONB containment: metadata @> {"tags": ["org:uuid"]}
+                    jsonb_filter["tags"] = [filter_json.pop("organization_tag")]
+
+                # Add remaining filters
+                for k, v in filter_json.items():
+                    if k not in ["source", "organization_tag"]:
+                        jsonb_filter[k] = v
+
+                # Detect embedding dimension from query embedding length
+                embedding_dimension = len(query_embedding)
+
+                # Call the hybrid search PostgreSQL function with multi-dimensional support
                 response = self.supabase_client.rpc(
-                    "hybrid_search_archon_crawled_pages",
+                    "hybrid_search_archon_crawled_pages_multi",
                     {
                         "query_embedding": query_embedding,
+                        "embedding_dimension": embedding_dimension,
                         "query_text": query,
                         "match_count": match_count,
-                        "filter": filter_json,
+                        "filter": jsonb_filter,
                         "source_filter": source_filter,
                     },
                 ).execute()

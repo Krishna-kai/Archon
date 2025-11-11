@@ -51,14 +51,20 @@ class BaseSearchStrategy:
                 rpc_params = {"query_embedding": query_embedding, "match_count": match_count}
 
                 # Add filter parameters
+                jsonb_filter = {}
                 if filter_metadata:
                     if "source" in filter_metadata:
                         rpc_params["source_filter"] = filter_metadata["source"]
-                        rpc_params["filter"] = {}
-                    else:
-                        rpc_params["filter"] = filter_metadata
-                else:
-                    rpc_params["filter"] = {}
+                    if "organization_tag" in filter_metadata:
+                        # Use JSONB containment: metadata @> {"tags": ["org:uuid"]}
+                        jsonb_filter["tags"] = [filter_metadata["organization_tag"]]
+
+                    # Build remaining filters (exclude source and organization_tag)
+                    for k, v in filter_metadata.items():
+                        if k not in ["source", "organization_tag"]:
+                            jsonb_filter[k] = v
+
+                rpc_params["filter"] = jsonb_filter
 
                 # Execute search
                 response = self.supabase_client.rpc(table_rpc, rpc_params).execute()

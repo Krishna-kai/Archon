@@ -242,7 +242,7 @@ class RAGService:
         return page_results[:match_count]
 
     async def perform_rag_query(
-        self, query: str, source: str = None, match_count: int = 5, return_mode: str = "chunks"
+        self, query: str, source: str = None, match_count: int = 5, return_mode: str = "chunks", organization_id: str | None = None
     ) -> tuple[bool, dict[str, Any]]:
         """
         Unified RAG query with all strategies.
@@ -257,6 +257,7 @@ class RAGService:
             source: Optional source domain to filter results
             match_count: Maximum number of results to return
             return_mode: "chunks" (default) or "pages"
+            organization_id: Optional organization ID for multi-tenant filtering
 
         Returns:
             Tuple of (success, result_dict)
@@ -268,7 +269,13 @@ class RAGService:
                 logger.info(f"RAG query started: {query[:100]}{'...' if len(query) > 100 else ''}")
 
                 # Build filter metadata
-                filter_metadata = {"source": source} if source else None
+                filter_metadata = {}
+                if source:
+                    filter_metadata["source"] = source
+                if organization_id:
+                    filter_metadata["organization_tag"] = f"org:{organization_id}"
+
+                filter_metadata = filter_metadata if filter_metadata else None
 
                 # Check which strategies are enabled
                 use_hybrid_search = self.get_bool_setting("USE_HYBRID_SEARCH", False)

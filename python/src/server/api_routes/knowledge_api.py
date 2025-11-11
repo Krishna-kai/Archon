@@ -178,6 +178,16 @@ class RagQueryRequest(BaseModel):
     source: str | None = None
     match_count: int = 5
     return_mode: str = "chunks"  # "chunks" or "pages"
+    organization_id: str | None = None  # Filter by organization for multi-tenancy
+
+
+class IndexTextRequest(BaseModel):
+    content: str
+    filename: str
+    knowledge_type: str = "technical"
+    tags: list[str] | None = None
+    extract_code_examples: bool = True
+    organization_id: str | None = None
 
 
 @router.get("/crawl-progress/{progress_id}")
@@ -891,6 +901,103 @@ async def _perform_crawl_with_progress(
                 )
 
 
+@router.post("/documents/index-text")
+async def index_text_document(request: IndexTextRequest):
+    """Index text/markdown content directly into the RAG knowledge base.
+
+    This endpoint is for indexing already-processed text (e.g., from OCR) without
+    re-processing. It uses the same DocumentStorageService as file uploads.
+
+    Args:
+        request: IndexTextRequest containing content, filename, and metadata
+
+    Returns:
+        Success status and source_id for tracking
+    """
+    try:
+        # Validate content
+        if not request.content or not request.content.strip():
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "Content cannot be empty"}
+            )
+
+        if not request.filename:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "Filename is required"}
+            )
+
+        # Validate API key before indexing
+        provider_config = await credential_service.get_active_provider("embedding")
+        provider = provider_config.get("provider", "openai")
+        await _validate_provider_api_key(provider)
+
+        # Generate source_id for this document
+        sanitized_filename = request.filename.replace(' ', '_').replace('.', '_')
+        source_id = f"text_{sanitized_filename}_{uuid.uuid4().hex[:8]}"
+
+        # Add organization_id to source_id metadata if provided
+        if request.organization_id:
+            source_id = f"org_{request.organization_id[:8]}_{source_id}"
+
+        safe_logfire_info(
+            f"Indexing text document | filename={request.filename} | length={len(request.content)} | "
+            f"knowledge_type={request.knowledge_type} | organization_id={request.organization_id}"
+        )
+
+        # Use DocumentStorageService to index the content
+        doc_storage_service = DocumentStorageService(get_supabase_client())
+
+        # Add organization_id to tags for filtering
+        final_tags = request.tags or []
+        if request.organization_id and f"org:{request.organization_id}" not in final_tags:
+            final_tags.append(f"org:{request.organization_id}")
+
+        success, result = await doc_storage_service.upload_document(
+            file_content=request.content,
+            filename=request.filename,
+            source_id=source_id,
+            knowledge_type=request.knowledge_type,
+            tags=final_tags,
+            extract_code_examples=request.extract_code_examples,
+            progress_callback=None,  # No progress tracking for direct indexing
+            cancellation_check=None,
+        )
+
+        if success:
+            safe_logfire_info(
+                f"Text document indexed successfully | source_id={result.get('source_id')} | "
+                f"chunks_stored={result.get('chunks_stored')} | "
+                f"code_examples_stored={result.get('code_examples_stored', 0)}"
+            )
+
+            return {
+                "success": True,
+                "source_id": result.get("source_id"),
+                "chunks_stored": result.get("chunks_stored"),
+                "code_examples_stored": result.get("code_examples_stored", 0),
+                "message": "Document indexed successfully into RAG knowledge base",
+            }
+        else:
+            error_msg = result.get("error", "Unknown error during indexing")
+            raise HTTPException(
+                status_code=500,
+                detail={"error": error_msg}
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        safe_logfire_error(
+            f"Failed to index text document | error={str(e)} | filename={request.filename}"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail={"error": f"Failed to index document: {str(e)}"}
+        )
+
+
 @router.post("/documents/upload")
 async def upload_document(
     file: UploadFile = File(...),
@@ -1195,7 +1302,8 @@ async def perform_rag_query(request: RagQueryRequest):
             query=request.query,
             source=request.source,
             match_count=request.match_count,
-            return_mode=request.return_mode
+            return_mode=request.return_mode,
+            organization_id=request.organization_id
         )
 
         if success:
